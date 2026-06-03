@@ -1,0 +1,63 @@
+Tom tat cuoc tro chuyen - OmniVoice-master - Copy
+
+1. Muc tieu ban dau
+- Ban muon co giao dien full tieng Viet.
+- Ban muon mo bang 1 file .bat va dung ngay.
+- Ban muon local, khong phai tu cai tay nhieu buoc.
+
+2. Nhung viec da lam o giai doan dau
+- Da Viet hoa giao dien Gradio cua OmniVoice.
+- Da tao file bat de chay tu dong.
+- Da sua loi cong 8001/8888 bi trung.
+- Da sua de app tu tim cong trong khi can.
+
+3. Van de phat sinh
+- Ban khong muon no mo theo kieu web/trinh duyet.
+- Ban muon mot app chay tren may that su.
+- Ban thay ban native dau tien khong dep va khong du tinh nang nhu ban web.
+- Ban gap loi tai model/ASR lap lai, gay day o dia va treo may.
+
+4. Nhung huong da thu
+- Huong 1: Gradio/web UI chay local.
+  + Uu diem: dep, nhanh co giao dien xau dep nhu web.
+  + Nhuoc diem: van la web, van dinh trinh duyet.
+- Huong 2: CustomTkinter native app.
+  + Uu diem: native that.
+  + Nhuoc diem: giao dien chua du xin, thua web nhieu.
+- Huong 3: PySide6/Qt native app.
+  + Day la huong dang duoc chon de tiep tuc vi hop voi yeu cau: native that, co the lam dep hon, co preview/timeline.
+
+5. Nhung thay doi quan trong da duoc ap dung
+- Da gom cache ve trong thu muc project .cache de de kiem soat hon.
+- Da tao co che model local de tranh tai lai lung tung.
+- Da loai bo huong mo app bang Chrome/Edge/browser.
+- Da chuyen launcher chinh sang huong native desktop.
+
+6. Trang thai hien tai cua ban OmniVoice-master - Copy
+- File chinh dang duoc dung: Mo_OmniVoice_App_Local.bat
+- App native hien tai dang dua tren PySide6/Qt.
+- Da co cac thanh phan sau:
+  + preview media
+  + player preview
+  + timeline chon doan keo duoc
+  + clone giong bang transcript mau
+  + thiet ke giong local
+  + cai dat thong so
+  + animation chuyen trang co ban
+
+7. Dieu gi da duoc test
+- Da compile app Qt thanh cong.
+- Da chay truc tiep app Qt voi model local thanh cong.
+- Da chay smoke test end-to-end bang chinh file .bat thanh cong.
+- Da xac nhan launcher khong con mo browser/web theo huong moi.
+
+8. Gioi han hien tai
+- Clone Giong hien van yeu cau nhap transcript cua file mau.
+- Ly do: de tranh tai them ASR/Whisper nang, gay day o dia va treo may nhu truoc.
+- Giao dien native da tot hon nhieu so voi ban cu, nhung chua the khang dinh da dep ngang 100% ban web.
+
+9. Ket luan den thoi diem luu tom tat
+- Du an da duoc chuyen tu huong web sang native desktop that.
+- Huong di hien tai la PySide6/Qt.
+- File de mo app: Mo_OmniVoice_App_Local.bat
+- Neu con loi thuc te tren may, can sua tiep tren ban Qt native hien tai, khong quay lai huong web.
