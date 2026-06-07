@@ -1,0 +1,756 @@
+TOM TAT TOAN BO CUOC TRO CHUYEN - OMNIVOICE LOCAL APP
+
+1. VAN DE BAN DAU
+- Ban chay file:
+  D:\ALL TOOL\TOOL LÀM YOUTUBE\Ominivoice tao giong doc local\Mo_OmniVoice_App_Local.bat
+- Van de: tool khong chay.
+
+2. NGUYEN NHAN LOI KHOI DONG BAN DAU
+- Da kiem tra file .bat va chay truc tiep de lay loi that.
+- Loi cu the:
+  ModuleNotFoundError: No module named 'qdarktheme'
+- Nguyen nhan:
+  + omnivoice_qt_app.py co import qdarktheme
+  + nhung file .bat chua kiem tra/cai package nay.
+
+3. CAC BUOC SUA LOI KHOI DONG
+- Da cai package thieu vao dung virtual environment cua project:
+  + pyqtdarktheme
+- Da xac nhan import OK trong .venv.
+- Sau do da sua file Mo_OmniVoice_App_Local.bat de:
+  + kiem tra them qdarktheme trong lenh import dependency
+  + tu dong cai them pyqtdarktheme neu thieu
+- Muc tieu: lan sau mo app se tu xu ly, khong can cai tay nua.
+
+4. THEM NUT HUY KHI TAO GIONG
+- Ban yeu cau them nut Huy de khi dang tao giong co the dung lai.
+- Ban dau da them co che cancel trong UI va worker.
+- Lan dau nut Huy duoc lam theo kieu huy theo chunk hien tai.
+
+5. THU HUY KHAN CAP VA VAN DE PHAT SINH
+- Sau do ban yeu cau “bam la huy luon, dung khan cap”.
+- Da thu dung force-stop bang QThread.terminate().
+- Ket qua:
+  + dung ngay lap tuc
+  + nhung co the lam thoat luon ca app
+- Ban da xac nhan hien tuong: bam Huy la app thoat luon.
+- Nguyen nhan duoc xac dinh ro:
+  + terminate() kill tho thread dang chay torch/model.generate()
+  + co the lam sap toan bo process Qt/PyTorch.
+
+6. SUA LAI NUT HUY THEO HUONG AN TOAN
+- Ban noi ro mong muon:
+  + dang tao giong thi bam Huy -> no ngung tao
+  + khong thoat app
+  + de tiep tuc chinh sua
+- Da sua lai theo huong an toan:
+  + bo force-stop terminate()
+  + them cancel_event vao core model omnivoice/models/omnivoice.py
+  + noi cancel_event vao cac vong suy luan noi bo
+  + UI chi gui yeu cau huy, model tu dung an toan
+- Ket qua mong muon:
+  + app van mo
+  + job dang tao giong se dung
+  + co the tiep tuc sua noi dung va tao lai.
+
+7. VAN DE CUDA / GPU KHONG NHAN
+- Ban hoi vi sao app chay CPU du may co card roi.
+- Da kiem tra:
+  + nvidia-smi nhan GPU: NVIDIA GeForce RTX 3050 Laptop GPU
+  + driver OK
+  + nhung torch trong .venv la ban CPU-only:
+    torch 2.12.0+cpu
+    torch.cuda.is_available() = False
+- Nguyen nhan that:
+  + virtual environment dang cai nham torch CPU, khong phai do may khong co GPU.
+
+8. SUA CUDA CHO PROJECT
+- Da go torch CPU va torchaudio cu trong .venv.
+- Da thu cai lai torch CUDA bang cu128.
+- Lan dau cai that bai vi het dung luong o C: (No space left on device).
+- Da dieu tra va xac dinh:
+  + o C con rat it cho trong
+  + pip/temp dang dung C:
+- Da doi TEMP/TMP va cache tam sang o D: trong project.
+- Da cai lai thanh cong:
+  + torch 2.11.0+cu128
+  + torchaudio 2.11.0+cu128
+- Da xac minh thanh cong:
+  + torch.cuda.is_available() = True
+  + torch.version.cuda = 12.8
+  + device_count = 1
+  + device = NVIDIA GeForce RTX 3050 Laptop GPU
+
+9. XAC NHAN LAUNCHER LEN CUDA THAT
+- Da chay lai Mo_OmniVoice_App_Local.bat.
+- Da thay log:
+  Dang nap model tren cuda...
+- Ket luan:
+  + app da nhan GPU that
+  + launcher OK
+  + timeout sau do chi la vi app tiep tuc mo cua so, khong phai loi startup.
+
+10. PHAN TICH VAN DE HIEU NANG RAT CHAM
+- Ban cho biet: tao khoang 1 tieng audio co the mat den 24 tieng.
+- Da phan tich config hien tai va giai thich ly do:
+  + num_step mac dinh = 32
+  + guidance_scale = 2.0
+  + speed = 1.0
+  + model co vong suy luan iterative theo nhieu step
+  + audio dai bi chia thanh nhieu chunk va moi chunk lai chay nhieu buoc
+  + RTX 3050 Laptop GPU 4GB chi o muc tam vua
+- Da dua ra de xuat toi uu an toan:
+  + Inference steps: 16
+  + Guidance: 1.5
+  + Speed: 1.15
+- Ban hoi “duoc ha”, sau do hoi “cai nao ok thi chon”.
+- Da chon preset can bang:
+  + 16 / 1.5 / 1.15
+- Ban tra loi “khoi”, nghia la khong sua mac dinh app ngay luc do.
+
+11. TOI UU GIAO DIEN - VONG 1
+- Ban yeu cau: “can chinh toi uu giao dien”.
+- Da sua giao dien trong omnivoice_qt_app.py theo huong:
+  + dark theme gon hon
+  + card bo goc
+  + spacing deu hon
+  + nut, input, combo, progress bar dong bo hon
+  + settings group de nhin hon
+  + result/log can doi hon
+  + tab design duoc dong bo layout voi tab clone
+- Da smoke test thanh cong, app van len binh thuong tren CUDA.
+
+12. TOI UU GIAO DIEN - VONG 2 (COMPACT + PRO)
+- Ban tiep tuc chon ca 2 huong:
+  + compact hon
+  + pro hon
+- Da tiep tuc toi uu:
+  + lam giao dien gon hon, it ton chieu cao hon
+  + bo tri workflow trai/phai ro hon
+  + them badge “Buoc 1 / Buoc 2 / Buoc 3 / Buoc 4”
+  + panel trai = nhap lieu / setup
+  + panel phai = tao / ket qua / xuat file
+  + giam do cao cac khung nhap de hien duoc nhieu thong tin hon
+  + xoa mot ban _build_design_page cu bi trung de code sach hon
+- Da smoke test lai thanh cong, app van chay tren CUDA.
+
+13. CAC FILE CHINH DA DUOC SUA O GIAI DOAN DAU
+- Mo_OmniVoice_App_Local.bat
+- omnivoice_qt_app.py
+- omnivoice\models\omnivoice.py
+
+14. TRANG THAI HIEN TAI TAI MOI DIEM CU
+- Launcher chinh dang dung:
+  D:\ALL TOOL\TOOL LÀM YOUTUBE\Ominivoice tao giong doc local\Mo_OmniVoice_App_Local.bat
+- App la native desktop tren PySide6/Qt.
+- App da nhan CUDA va GPU RTX 3050.
+- Co nut Huy an toan:
+  + huy qua trinh tao giong
+  + khong thoat app
+  + cho phep tiep tuc chinh sua
+- Giao dien da duoc toi uu 2 vong.
+- Ban chua doi preset mac dinh ve toc do/chat luong, nhung da co khuyen nghi:
+  + Inference steps = 16
+  + Guidance = 1.5
+  + Speed = 1.15
+
+15. GIOI HAN / GHI CHU O GIAI DOAN DAU
+- LSP diagnostics Python khong chay duoc trong moi truong nay vi thieu basedpyright-langserver.
+- Viec xac minh luc do chu yeu bang:
+  + smoke test
+  + chay launcher that
+  + doc code va doi chieu runtime
+- Hieu nang tao audio rat dai van la bai toan can toi uu tiep neu muon lam hang gio audio nhanh hon.
+
+16. CHUYEN SANG TOI UU DOC TIENG VIET / CLONE TIENG VIET
+- Ban bat dau gap loi clone giong doc bi mat chu / doc khong het chu.
+- Ban xac nhan:
+  + co dau phay
+  + co audio mau
+  + giong clone dung
+  + nhung bi nuot chu, bo sot cu the trong cau
+- Sau do xac dinh ro yeu cau:
+  + ban thuong viet kịch bản bang dau phay
+  + uu tien cao nhat la doc dung chu toi da
+
+17. PHAN TICH NGUYEN NHAN NUOT CHU
+- Da doc code va xac dinh 2 nhom nguyen nhan chinh:
+  + chunking dang chia va noi theo cach de model nuot cum giua cau comma-heavy
+  + co cac tang bien doi dau cau chong nhau lam text dua vao model khac text goc
+- Dac biet da phat hien:
+  + normalizer tieng Viet tung co logic chen them `, .`
+  + worker tung co logic doi `. ` thanh `, ` truoc khi generate
+- Hai lop nay lam text thuc te dua vao model bi meo.
+
+18. SUA NORMALIZER TIENG VIET DE GIU NGUYEN CHU
+- Da sua omnivoice\utils\text.py theo huong:
+  + bo viec bien dau phay thanh `, .`
+  + bo viec tu dong chen ` . . .` vao cuoi text
+  + giu lai cac phan can thiet nhu normalize so/ngay gio/don vi
+  + tra ve text da strip gon, khong chen dau la
+- Muc tieu: text dua vao model sat voi kịch bản goc nhat co the.
+
+19. SUA WORKER DE KHONG BIEN DOI NOI DUNG CHUNK NUA
+- Da sua omnivoice_qt_app.py:
+  + bo logic thay `...` thanh `,`
+  + bo logic thay `. ` thanh `, `
+  + bo logic ep dau cham cuoi chunk thanh dau phay
+  + dua chunk vao model theo dung noi dung da chia
+- Da them log `[TEXT_CHUNK]` de hien thi tung chunk thuc te dang gui vao model.
+
+20. THUONG HOA CHIEN LUOC CHIA CHUNK CHO KỊCH BAN DAU PHAY
+- Ban dua file mau:
+  D:\YOUTUBE\KÊNH 2 Hồ Sơ Ám Ảnh\SHORT 9\kich ban.txt
+- Da doc file va thay:
+  + toan bo script nam tren 1 dong
+  + hang loat ve cau ngan nhau bang dau phay
+- Da thu nhieu chinh sua chunking de xu ly cac loi:
+  + mat cum `cuộn thép lên`
+  + mat `sơ sẩy phát là nát con mẹ nó xe`
+  + mat `Đặt nằm ngang mà xe xóc nhẹ một phát thôi`
+  + mat `vì miếng cơm manh áo nên phải liều thôi`
+- Da mo phong chunking bang script va xac nhan sau chinh sua cac cum tren deu ton tai trong chunk.
+
+21. THEM KHOANG NGHI GIUA CAC CHUNK
+- Khi noi audio chunk, ban dau chi `np.concatenate` truc tiep.
+- Da sua de chen khoang im lang ngan giua cac chunk nham:
+  + tranh dinh chu
+  + tranh cat cut bien chunk
+- Ban dau de 0.12s.
+- Sau khi ban test thay nghi hoi hoi lau, da giam xuong 0.05s.
+
+22. SUA APP TU THOAT SAU KHI TAO XONG
+- Ban bao: tao xong roi app thoat luon.
+- Da phan tich va xac dinh kha nang cao la do lifecycle QThread.
+- Code cu set `self.worker = None` ngay trong `_on_worker_success` / `_on_worker_error`.
+- Dieu nay co the gay tinh trang QThread bi huy khi thread chua finished han.
+- Da sua:
+  + noi signal `finished`
+  + chi xoa worker trong `_on_worker_finished`
+  + goi `deleteLater()` dung cach
+  + giu tam reference worker de tranh gom rac som
+- Da compile va xac nhan logic hop le.
+
+23. TOI UU THEM DE GIAM GPU/CPU EP QUA MUC
+- Ban hoi vi sao GPU hay nhay 100%.
+- Da tung thu cac can thiep de giam tai:
+  + them sleep nho trong vong suy luan
+  + gioi han threads
+  + dat bien moi truong OMP/MKL
+- Ve sau trong luong toi uu chinh, da giu lai huong an on dinh va bo sung xoa CUDA cache sau khi tao xong:
+  + `torch.cuda.empty_cache()`
+- Muc tieu:
+  + giai phong cache VRAM sau generation
+  + tranh cam giac GPU van bi giu tai sau khi xong viec
+
+24. XU LY LOI HUT HOI O CHU CUOI CHUNK
+- Ban test va thay cac tu nhu `lồn` o cuoi ve bi nhả yeu/hut hoi.
+- Da thu cac huong:
+  + doi dau ket thuc chunk `, ; :` thanh `.` truoc khi dua vao model
+  + neu chunk khong co dau ket thuc thi them `.`
+  + tang/giam do dai chunk
+  + gop chunk ngắn voi chunk sau neu can
+- Sau nhieu lan thu, ket luan thuc dung nhat la:
+  + uu tien doc theo tung ve dau phay de giam mat cum
+  + xu ly moi chunk nhu mot don vi doc rieng gan nhu doc tung menh de
+
+25. CHUYEN HN CHIEN LUOC DOC DUNG CHU TOI DA
+- Ban noi ro: khong the moi lan sai 1 tu lai phai sua tiep tung tu mai.
+- Da doi chien luoc chunking sang huong practical hon:
+  + gan nhu moi ve ngan boi dau phay se thanh 1 don vi doc rieng
+  + chi gop voi ve sau neu chunk qua ngan
+  + hoac neu chunk ket thuc bang tu nhay phat am
+- Cac nguong da duoc doi lai de phu hop che do accuracy:
+  + gop toi thieu rat han che
+  + khong gop tran lan de tranh model nuot cum giua
+- Ket qua ban test:
+  + “ê được đấy”
+  + nghia la chien luoc moi cho ket qua tot hon dang ke ve do dung chu
+
+26. THEM DANH SACH TU NHAY PHAT AM KIỂU GEN Z / CHUI TUC
+- Ban goi y can “len danh sach tat ca cac tu hien nay” vi gioi tre chui tuc nhieu.
+- Da can nhac 2 huong:
+  + doi chu / phien am an
+  + giu nguyen chu va chi dieu khien chunker
+- Da chon huong kha thi nhat:
+  + KHONG doi chu
+  + KHONG censor
+  + KHONG phien am an mac dinh
+  + chi dung danh sach tu nhay de tranh cat chunk ngay truoc/sau cac tu nay
+- Da tao danh sach rong kieu Gen Z / slang / viet tat / bien the teencode.
+
+27. TACH TU DIEN TU NHAY RA FILE RIENG
+- Da tao file moi:
+  omnivoice\utils\vi_sensitive_terms.py
+- File nay chua set:
+  `VI_PRONUNCIATION_SENSITIVE_TERMS`
+- Vi du nhom tu da co:
+  + lồn / lol / loz / lon / lz
+  + đéo / đếch / địt / đm / dm / dcm / đcm
+  + cặc / cak / cc / cl
+  + cứt / shit
+  + vãi / vl / vcl / vkl / vcđ / vcc
+  + con mẹ nó / mẹ nó / nát con mẹ nó
+  + óc chó / occho
+  + wtf / sml
+- Da sua text.py de import danh sach nay va build regex kiem tra chunk ket thuc bang tu nhay.
+- Da sua chunker trong omnivoice_qt_app.py de:
+  + neu chunk ngắn thi co the gop
+  + neu chunk ket thuc bang tu nhay phat am thi uu tien gop them chunk sau neu con an toan
+- Loi ich:
+  + sau nay ban co the tu them/bot slang chi bang cach sua 1 file tu dien
+  + khong can sua logic app nua
+
+28. TINH CHINH NHỊP NGHI GIUA CAC VE
+- Sau khi accuracy mode cho ket qua dung chu hon, ban thay no “nghi hoi hoi lau”.
+- Da giam pause noi chunk:
+  + tu 0.12s xuong 0.05s
+- Muc tieu:
+  + van du chu
+  + nhung bot cam giac ngat hoi qua tay
+
+29. CAC KIEM TRA DA THUC HIEN TRONG GIAI DOAN SAU
+- Da dung `py_compile` de kiem tra cac file Python sua doi.
+- Da mo phong chia chunk bang script inline de doi chieu truc tiep voi kịch bản cua ban.
+- Da xac nhan bang log chunk rang nhieu cum tung bi mat van nam trong chunk sau khi doi chien luoc.
+- Khong co unit test san trong repo.
+- QA kha thi hien co:
+  + smoke test / launcher test
+  + CLI infer
+  + WER voi Whisper neu can verify sau
+
+30. CAC FILE CHINH DA DUOC SUA THEM TRONG GIAI DOAN TIENG VIET
+- omnivoice_qt_app.py
+- omnivoice\utils\text.py
+- omnivoice\utils\vi_sensitive_terms.py
+- .sisyphus\drafts\vietnamese-clone-read-accuracy.md
+
+31. TRANG THAI HIEN TAI SAU TOAN BO DOT SUA MOI NHAT
+- App van la native desktop PySide6/Qt chay local.
+- App da nhan CUDA / RTX 3050.
+- Co nut Huy an toan, khong thoat app khi huy.
+- Da sua crash app tu thoat sau khi generation xong.
+- Clone tieng Viet da duoc doi sang huong uu tien “doc dung chu toi da”.
+- Chunking hien tai phu hop hon cho script YouTube viet bang dau phay lien tuc.
+- Da co co che tu nhay phat am / slang Gen Z de tranh cat chunk o cac tu nhay nhu `lồn`, `đéo`, `vcl`, `cứt`...
+- Da giam khoang nghi chunk xuong 0.05s de bot bi ngat hoi lau.
+- Danh sach slang/tu nhay da duoc tach ra file rieng de ban co the tu chinh sau nay.
+
+32. HUONG DAN SU DUNG / TU CHINH VE SAU
+- File launcher chinh:
+  D:\ALL TOOL\TOOL LÀM YOUTUBE\Ominivoice tao giong doc local\Mo_OmniVoice_App_Local.bat
+- Neu muon them slang / tu nhay moi:
+  sua file `omnivoice\utils\vi_sensitive_terms.py`
+- Neu test thay van con tu/cum nao bi hut hoi hoac bo sot:
+  + gui lai dung text dau vao
+  + gui lai dung cau audio no doc ra
+  + de tiep tuc tinh chinh pattern chunk / boundary / pause
+
+33. KET LUAN CHUNG TOAN BO CHAN DUONG DEN THOI DIEM NAY
+- Tu mot file .bat khong chay vi thieu dependency, he thong da duoc sua de:
+  + tu cai dependency thieu
+  + nhan GPU CUDA dung cach
+  + chay native desktop app on dinh hon
+  + co co che huy an toan
+  + giao dien duoc toi uu ro rang va chuyen nghiep hon
+- Sau do tiep tuc duoc nang cap manh cho nhu cau thuc te cua ban:
+  + clone giọng tieng Viet
+  + script dau phay lien tuc
+  + uu tien doc dung chu
+  + xu ly rat nhieu tu tuc / slang / Gen Z ma khong can doi noi dung goc
+- Huong di hien tai la tiep tuc phat trien tren ban native PySide6/Qt nay, voi trong tam la:
+  + do dung chu
+  + do on dinh khi clone giọng
+  + kha nang tu chinh tu dien slang / pattern chunk theo phong cach kenh cua ban.
+
+34. LEN KE HOACH TOI UU GIAO DIEN THEO HUONG DEP NHUNG NHE
+- Ban yeu cau len ke hoach toi uu giao dien.
+- Sau khi trao doi, ban chot ro muc tieu:
+  + giao dien phai dep hon
+  + nhin hien dai, mem mai
+  + NHUNG phai nhe, an RAM it nhat co the
+- Da phan tich UI hien tai va xac dinh:
+  + giao dien nam trong `omnivoice_qt_app.py`
+  + file nay dang la dang monolith / god class
+  + co nhieu `setStyleSheet` inline
+  + co nhieu margin/spacing hardcode
+  + co custom widget `TrimRangeSelector`
+- Da lap plan rieng:
+  + `.sisyphus\plans\ui-optimization-lightweight.md`
+
+35. CAC NGUYEN TAC TOI UU UI DUOC CHOT
+- Khong dung hieu ung nang nhu:
+  + `QGraphicsDropShadowEffect`
+  + animation chuyen canh / opacity / blur
+- Giu `QMessageBox`, khong doi sang toast.
+- Khong them dependency UI moi.
+- Uu tien:
+  + dark theme hien dai
+  + bo goc mem
+  + border/gradient nhe de tao chieu sau gia
+  + van giu app nhe vi chay cung PyTorch.
+
+36. DA TACH TOAN BO STYLE RA FILE RIENG
+- Da tao file moi:
+  + `style.qss`
+- Da sua `_apply_style()` trong `omnivoice_qt_app.py` de:
+  + doc `style.qss` bang duong dan robust dua theo `os.path.dirname(__file__)`
+  + co fallback minimal neu file style loi / bi thieu
+- Muc tieu:
+  + code Python sach hon
+  + de doi theme / sua giao dien nhanh hon
+
+37. DA DON INLINE STYLE TRONG PYTHON
+- Da bo style inline cho cac thanh phan chinh nhu:
+  + header
+  + runtime badge
+  + device combo
+  + tabs
+  + clone generate button
+- Da chuyen sang dung object name / property de style bang `style.qss`.
+- Ket qua:
+  + `setStyleSheet` trong Python chi con phan loader + fallback toi thieu.
+
+38. DA TOI UU LAYOUT THEO HUONG NHE VA THOANG HON
+- Da giam / bo nhieu margin, spacing hardcode.
+- Muc tieu:
+  + giao dien co gian de tho hon
+  + bot cam giac bi dong khung cung
+  + de responsive hon tren cac kich thuoc cua so khac nhau
+- Khong co deep refactor kieu tach class lon, de tranh rui ro.
+
+39. DA TOI UU THEM CUSTOM WIDGET VA POPUP
+- `TrimRangeSelector` da duoc sua mau sac theo theme moi.
+- `QMessageBox` da duoc style bang `style.qss` de dong bo voi app.
+- Da giai quyet theo huong:
+  + dep hon
+  + nhung van nhe
+  + khong can hieu ung nang.
+
+40. DA BO HIEU UNG ANIMATION DE GIAM OVERHEAD
+- Trong qua trinh review phat hien con `QPropertyAnimation` cu dung cho chuyen page.
+- Vi ban yeu cau uu tien RAM/CPU nhe nhat co the, da bo animation nay.
+- Ket qua:
+  + chuyen view tuc thi
+  + bot overhead CPU/GPU
+  + dung hon voi tieu chi “dep nhung nhe”.
+
+41. SU CO PHAT SINH: FILE `omnivoice_qt_app.py` BI LOI MA HOA CHU
+- Sau khi sua UI, review cuoi phat hien file Python bi mojibake / loi encoding.
+- Dau hieu:
+  + nhieu chuoi tieng Viet bi bien dang kieu `Tá»± Ä‘á»™ng`
+  + mot so chuoi Chinese instruct cung bi hong
+- Anh huong:
+  + UI hien thi loi chu
+  + quan trong hon la prompt instruct tieng Trung co the gui sai vao model
+
+42. DA SUA LOI ENCODING O CAC CHUOI QUAN TRONG
+- Da khong co gang “giai ma mu” toan bo file theo 1 lenh duy nhat vi co cho mat ky tu.
+- Da chuyen sang huong an toan hon:
+  + doi chieu voi cac file tham chieu nhu `omnivoice_pro_ui.py`, `omnivoice_native.py`, `patch_demo.py`
+  + phuc hoi lai cac chuoi quan trong bang tay / patch co kiem soat
+- Cac nhom da duoc phuc hoi:
+  + `_ALL_LANGUAGES`
+  + `_CATEGORIES`
+  + `_VI_TO_INSTRUCT`
+  + text tren header / tabs / button / status / popup / summary
+- Da xac minh lai cac sentinel quan trong:
+  + `Tự động`
+  + `陕西话`
+  + `Female`
+
+43. DA CLEANUP PHAN DU THUA SAU TOI UU UI
+- Da bo import `qdarktheme` khong con dung.
+- Da xoa code nav cu khong con tac dung:
+  + `_switch_page`
+  + `_nav_buttons`
+  + selector `NavBtn` / `NavBtnActive` trong `style.qss`
+- Da sua not comment mojibake con sot co the nhin thay duoc.
+
+44. KIEM TRA SAU KHI TOI UU UI
+- Da chay `py_compile` thanh cong cho `omnivoice_qt_app.py`.
+- Da smoke test khoi tao cua so Qt voi mock model thanh cong.
+- Da xac minh:
+  + app van len duoc
+  + khong con heavy effect/animation khong can thiet
+  + style external load OK
+
+45. BAT DAU THEM TINH NANG NON-VERBAL / TIENG CUOI
+- Ban hoi: co lam duoc “cuoi” hay khong.
+- Da kiem tra docs cua OmniVoice va xac nhan no co ho tro non-verbal tags, vi du:
+  + `[laughter]`
+  + `[sigh]`
+  + `[question-en]`
+  + `[surprise-ah]`
+  + `[dissatisfaction-hnn]`
+- Sau do ban yeu cau lam het:
+  + huong dan cach dung
+  + them UI de chen nhanh
+  + test local app
+
+46. DA THEM CHEN NHANH TAG NON-VERBAL TRONG UI
+- Da them thanh “Chèn nhanh” cho ca 2 o nhap text:
+  + tab clone
+  + tab thiet ke giong
+- Ban dau co cac nut:
+  + `Cười` -> `[laughter]`
+  + `Thở dài` -> `[sigh]`
+  + `Ngạc nhiên` -> `[surprise-ah]`
+- Ve sau da mo rong them thanh day du hon, gom nhieu tag huu dung nhu:
+  + `[confirmation-en]`
+  + `[question-en]`
+  + `[question-ah]`
+  + `[question-oh]`
+  + `[surprise-oh]`
+  + `[surprise-wa]`
+  + `[dissatisfaction-hnn]`
+
+47. DA KIEM TRA PIPELINE CO GIU TAG HAY KHONG
+- Da test voi `GenerationWorker._split_text_chunks()` va `_prepare_chunk_text()`.
+- Ket qua:
+  + tag kieu `[laughter]` di qua chunker van con nguyen
+  + chunking/prepare khong lam mat tag
+- Tuy nhien, sau khi test thuc te, ban bao mot van de quan trong:
+  + model doc luon ca chu `[laughter]`
+
+48. NGUYEN NHAN THAT CUA LOI DOC LUON CHU `[laughter]`
+- Da dieu tra vao backend trong `omnivoice\models\omnivoice.py`.
+- Phat hien:
+  + code model co regex `_NONVERBAL_PATTERN` de xu ly tag
+  + NHUNG tokenizer local cua checkpoint `models\OmniVoice` khong coi `[laughter]` la special token atomic that
+  + no tach thanh:
+    `[` + `laughter` + `]`
+- He qua:
+  + model doc literal tag thay vi phat am thanh cuoi that
+
+49. DA SUA THEO HUONG THUC DUNG DE KHONG DOC LITERAL TAG NUA
+- Vi local tokenizer khong support special tag that, da doi chien luoc.
+- Da sua `omnivoice\utils\text.py` trong `map_vietnamese_emotions()` theo huong fallback an toan:
+  + `[laughter]` -> `há há há`
+  + `[sigh]` -> `haizz`
+  + `[surprise-wa]` -> `oà!`
+  + `[surprise-oh]` -> `ồ!`
+  + `[surprise-ah]` -> `á!`
+  + `[dissatisfaction-hnn]` -> `hừm`
+  + ... va mot so tag hoi / xac nhan khac
+- Muc tieu:
+  + khong con doc ra chu `[laughter]`
+  + van co bieu hien gan voi cuoi / cam xuc trong audio
+
+50. DA DOI CA AUTO-MAP `haha / hehe / hihi / hoho`
+- Ban yeu cau tiep tuc lam sao de cuoi de dung that te hon.
+- Da sua `map_vietnamese_emotions()` de cac mau nhu:
+  + `haha`
+  + `hehe`
+  + `hihi`
+  + `hoho`
+  se khong doi sang bracket tag nua, ma doi truc tiep sang cue noi duoc, vi du:
+  + `há há há`
+  + `hé hé hé`
+  + `hí hí hí`
+  + `hô hô hô`
+- Nhung sau khi xac dinh local tokenizer khong hieu bracket tag, da uu tien fallback cue noi duoc de khoi doc literal.
+
+51. KET QUA THUC TE SAU KHI SUA TIENG CUOI
+- Truoc khi sua:
+  + `[laughter] Đúng rồi...` co the bi doc thanh ca chu `laughter`
+- Sau khi sua fallback:
+  + truoc khi vao model, no se thanh dang kieu:
+    `há há há Đúng rồi, buồn cười thật.`
+- Loi ich:
+  + van co cam giac cuoi
+  + khong doc literal ngoac vuong nua
+  + khong can doi tokenizer/model
+
+52. CAC KIEM TRA DA CHAY CHO TINH NANG NON-VERBAL
+- Da test `map_vietnamese_emotions()` voi cac mau:
+  + `[laughter] Đúng rồi, buồn cười thật.`
+  + `haha đúng là hài`
+  + `[sigh] thôi xong`
+  + `[question-en] Hello? [laughter] đúng rồi [surprise-wa]`
+- Da xac minh:
+  + sau fallback, text vao chunker da la cue noi duoc
+  + app van compile duoc
+  + app van startup smoke test duoc
+
+53. CAC FILE CHINH DA SUA THEM O GIAI DOAN UI + NON-VERBAL
+- `omnivoice_qt_app.py`
+- `style.qss`
+- `omnivoice\utils\text.py`
+- `.sisyphus\plans\ui-optimization-lightweight.md`
+- `.sisyphus\evidence\...`
+
+54. TRANG THAI HIEN TAI MOI NHAT SAU TOAN BO DOT SUA BO SUNG
+- UI da duoc toi uu theo huong:
+  + dep hon
+  + mem hon
+  + dark theme hien dai hon
+  + nhung van nhe, khong them effect nang
+- Style da tach ra `style.qss`.
+- App van smoke test OK.
+- Chuoi tieng Viet / Chinese quan trong da duoc phuc hoi lai sau su co encoding.
+- Da co thanh chen nhanh non-verbal cho ca 2 tab text.
+- Van de doc literal `[laughter]` da duoc xu ly bang fallback text cue noi duoc.
+- Nghia la hien tai neu ban chen tag cười, he thong se doi no thanh mau cuoi kieu `há há há` truoc khi generate de tranh doc ngoac vuong.
+
+55. GHI CHU THUC TE VE GIOI HAN HIEN TAI CUA TIENG CUOI
+- Theo docs OmniVoice goc, tag non-verbal ly tuong la token dac biet.
+- Nhung trong local checkpoint/tokenizer cua ban hien tai:
+  + tokenizer khong support dac biet cho `[laughter]` theo cach da test
+- Vi vay giai phap hien tai la practical fallback, KHONG phai native laughter token that.
+- Uu diem:
+  + dung duoc ngay
+  + khong doc literal tag
+  + khong phai doi model
+- Han che:
+  + tieng cuoi la “cue text de model doc ra giong cuoi” hon la su kien non-verbal native chinh thong.
+
+56. HUONG DAN SU DUNG MOI NHAT SAU KHI THEM TIENG CUOI
+- Neu muon cho no “cuoi”:
+  + mo app
+  + o o text, bam nut `Cười`
+  + no se chen tag logic cua app
+  + app se fallback thanh cue cuoi noi duoc truoc khi vao model
+- Co the viet kieu:
+  + `[laughter] Đúng rồi, buồn cười thật.`
+  + `haha đúng là hài`
+- Huong practical hien tai:
+  + dung 1 lan / 1 cum
+  + de o dau cum hoac truoc cau quan trong
+  + tranh spam lien tiep nhieu tag.
+
+57. BAN TEST THUC TE TAG NON-VERBAL LIEN TIEP VA PHAN HOI KET QUA
+- Ban da nhap thu mot prompt test chi gom tag, dai y kieu:
+  + `[laughter] [laughter] [laughter] [sigh] [confirmation-en] [dissatisfaction-hnn] [surprise-oh] [surprise-oh] [surprise-ah] [surprise-ah] [surprise-wa] [surprise-wa]`
+- Ban bao ket qua audio thuc te no doc ra theo huong:
+  + `Giác, haha, ừ, hừ, ô ô, a a, oa, oa`
+- Tu day da xac dinh ro mot van de practical:
+  + fallback hien tai dang bien tag thanh chu de model doc
+  + nen neu spam nhieu tag lien nhau thi no se doc thanh chuoi am tiet / cue text
+  + day khong phai non-verbal native that ma la cue noi duoc
+
+58. DA DOC CODE DE GIAI THICH RO NGUYEN NHAN OUTPUT LA
+- Da doc lai `omnivoice\utils\text.py` va `omnivoice\models\omnivoice.py`.
+- Da xac nhan:
+  + pipeline tieng Viet goi `map_vietnamese_emotions()` truoc khi generate
+  + `[laughter]`, `[sigh]`, `[confirmation-en]`, `[surprise-*]` deu bi doi thanh fallback text
+- Nghia la prompt tag cua ban se duoc bien thanh dang gan nhu:
+  + `há há há há há há haizz uh-huh hừm ồ! ồ! á! á! oà! oà!`
+- Vi vay output kieu `haha`, `ừ`, `hừ`, `ô ô`, `a a`, `oa oa` la hanh vi phu hop voi code luc do.
+
+59. BAN CHOT HUONG SUA: VUA DOI FALLBACK, VUA CHAN SPAM TAG
+- Sau khi giai thich, ban da chon ro huong lam tiep:
+  + lam ca hai
+- Nghia la muc tieu moi la:
+  + doi cue fallback de nghe tu nhien hon
+  + gop / chan tag lien tiep de tranh model doc lap may moc
+
+60. DA SUA LOGIC TEXT DE GOP TAG LIEN TIEP TRUOC KHI GENERATE
+- Da sua `omnivoice\utils\text.py`.
+- Da them hang so map fallback rieng cho non-verbal.
+- Da them helper de collapse tag non-verbal lien tiep theo huong:
+  + `[laughter] [laughter] [laughter]` -> con 1 tag
+  + cum surprise lien tiep nhu `[surprise-oh] [surprise-ah] [surprise-wa]` -> gop thanh 1 surprise representative
+  + KHONG gop neu bi ngan boi dau phay / dau cau
+- Muc tieu:
+  + giam doc lap cue
+  + tranh chuoi non-verbal bi doc may moc qua dai
+
+61. DA DOI FALLBACK GIAI DOAN 1 DE IT ROBOT HON
+- O vong sua dau tien, fallback da duoc doi theo huong gon hon:
+  + `[laughter]` -> `ha ha`
+  + `[confirmation-en]` -> `ừm`
+  + `[surprise-ah]` -> `ôi!`
+  + `[surprise-oh]` -> `ồ!`
+  + `[surprise-wa]` -> `òa!`
+  + `[dissatisfaction-hnn]` -> `hừm`
+- Da giu:
+  + `[sigh]` -> `haizz`
+- Muc tieu luc nay la:
+  + tranh kieu `há há há` qua kich
+  + tranh `uh-huh` qua Tay khi doc giong Viet
+
+62. PHAT HIEN VA SUA REGRESSION TRONG QUA TRINH VERIFY
+- Sau khi patch vong dau va test runtime, da phat hien mot loi phu:
+  + cue hoi kieu `á?` bi regex cuoi xu ly thanh dang `á! ?`
+- Da xac dinh nguyen nhan:
+  + regex surprise cleanup cuoi dang can nham vao cue hoi
+- Da sua regex de chi normalizer surprise khi hop le, khong dap len dau hoi.
+- Sau khi sua lai, test cho:
+  + `[question-ah] [question-ah]`
+  + `[question-ah] [question-oh]`
+  da ra ket qua dung hon.
+
+63. BAN TIEP TUC YEU CAU LAM TIEP CAI NUA
+- Sau khi vong sua dau xong, ban yeu cau lam tiep.
+- Da dua ra 2 huong:
+  + tinh chinh cue nghe doi hon nua
+  + them preview normalize trong UI
+- Ban chot ro:
+  + lam ca hai
+
+64. DA DOI FALLBACK GIAI DOAN 2 THEO HUONG DOI / NOI HON
+- Da tiep tuc sua `omnivoice\utils\text.py` de cue nghe doi hon nua:
+  + `[laughter]` -> `haha`
+  + `[sigh]` -> `hầy...`
+  + `[confirmation-en]` -> `ừ`
+  + `[dissatisfaction-hnn]` -> `hừ`
+  + `[surprise-ah]` -> `á!`
+  + `[surprise-oh]` -> `ồ`
+  + `[surprise-wa]` -> `òa`
+  + `[surprise-yo]` -> `ôi`
+- Dong thoi da sua cac regex bo tro de:
+  + `haha` khong bi convert nguoc theo kieu cu
+  + `haiz/haizz` -> `hầy...`
+  + `hừm/hm` -> `hừ`
+- Muc tieu:
+  + cue ngan
+  + nghe doi
+  + bot kich / bot sach vo theo kieu AI
+
+65. DA THEM NUT XEM PREVIEW NORMALIZE TRONG UI
+- Da sua `omnivoice_qt_app.py`.
+- Da import them:
+  + `normalize_vietnamese_numbers`
+  + `map_vietnamese_emotions`
+- Da them helper trong UI de build preview normalize tu text goc.
+- Da them nut moi:
+  + `Xem preview`
+- Nut nay duoc them vao thanh non-verbal o ca 2 noi:
+  + tab clone
+  + tab design
+- Khi bam, app se hien `QMessageBox` gom:
+  + `Text gốc`
+  + `--- Sau normalize ---`
+  + noi dung sau khi number normalization + non-verbal mapping duoc ap dung
+
+66. Y NGHIA THUC TE CUA PREVIEW NORMALIZE
+- Tinh nang nay giup ban:
+  + nhin thay truoc he thong se bien tag thanh gi
+  + kiem tra xem chuoi `[laughter] [sigh] ...` sau cung se vao model duoi dang nao
+  + debug nhanh ma khong can bam generate roi moi nghe ra
+- Dang hien tai no la preview bang popup, chua phai panel song trong UI.
+
+67. CAC KIEM TRA DA CHAY CHO DOT SUA MOI NHAT
+- Da chay `py_compile` cho:
+  + `omnivoice\utils\text.py`
+  + `omnivoice_qt_app.py`
+- Da chay test runtime truc tiep tren `map_vietnamese_emotions()`.
+- Mot mau verify sau cung cho ket qua dang kieu:
+  + input: `[laughter] [laughter] [sigh] [confirmation-en] [dissatisfaction-hnn] [surprise-oh] [surprise-wa]`
+  + output: `haha hầy... ừ hừ ồ`
+- Ngoai ra da xac minh:
+  + tag lap lien tiep duoc gop
+  + tag bi ngan boi dau phay thi khong bi gop
+
+68. CAC FILE DA SUA THEM O DOT LAM MOI NHAT
+- `omnivoice\utils\text.py`
+- `omnivoice_qt_app.py`
+
+69. TRANG THAI MOI NHAT SAU CUOC TRO CHUYEN NAY
+- He thong non-verbal cho ban local hien tai da duoc nang cap them theo huong practical hon:
+  + cue fallback nghe doi hon
+  + co collapse tag lien tiep
+  + tranh bớt doc lap may moc khi spam tag
+- App da co them nut `Xem preview` de coi text sau normalize truoc khi generate.
+- Van ban chat hien tai da duoc tom tat them vao file nay.

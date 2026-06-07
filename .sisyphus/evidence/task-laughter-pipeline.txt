@@ -1,0 +1,1 @@
+[laughter] preserved through _split_text_chunks and _prepare_chunk_text
