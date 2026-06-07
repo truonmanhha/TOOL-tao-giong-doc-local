@@ -23,11 +23,16 @@ Provides:
 - ``add_punctuation()``: Appends missing end punctuation (Chinese or English).
 """
 
+<<<<<<< HEAD
 import re
 from typing import List, Optional
 
 from omnivoice.utils.vi_sensitive_terms import VI_PRONUNCIATION_SENSITIVE_TERMS
 
+=======
+from typing import List, Optional
+
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
 SPLIT_PUNCTUATION = set(".,;:!?。，；：！？")
 CLOSING_MARKS = set("\"'""'）]》》>」】")
@@ -119,6 +124,7 @@ ABBREVIATIONS = {
 }
 
 
+<<<<<<< HEAD
 _SENSITIVE_END_RE = re.compile(
     r"(?iu)(?:^|\s)(" + "|".join(
         sorted((re.escape(term) for term in VI_PRONUNCIATION_SENSITIVE_TERMS), key=len, reverse=True)
@@ -171,6 +177,8 @@ def collapse_adjacent_nonverbal_tags(text: str) -> str:
     return text
 
 
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 def chunk_text_punctuation(
     text: str,
     chunk_len: int,
@@ -306,6 +314,7 @@ def normalize_vietnamese_numbers(text: str, is_vi: bool = True) -> str:
             break
         text = new_text
 
+<<<<<<< HEAD
     # 4. Convert plain numbers to words using num2words if available
     try:
         from num2words import num2words
@@ -400,3 +409,34 @@ def map_vietnamese_emotions(text: str) -> str:
 
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
+=======
+    return text
+
+
+def map_vietnamese_emotions(text: str) -> str:
+    """Map common Vietnamese emotion words to OmniVoice non-verbal tags."""
+    import re
+    if not text:
+        return text
+    
+    # Laughter: haha, hahaha, hehe, hihi, hoho, ha ha, he he
+    text = re.sub(r'\b(ha\s*){2,}\b', 'há há há', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(he\s*){2,}\b', 'hé hé hé', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hi\s*){2,}\b', 'hí hí hí', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hô\s*){2,}\b', 'hố hố hố', text, flags=re.IGNORECASE)
+    
+    # Sighs: haizz, thở dài
+    text = re.sub(r'\bhaiz+\b', '[sigh]', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bthở dài\b', '[sigh]', text, flags=re.IGNORECASE)
+    
+    # Dissatisfaction: hừm, hmm
+    text = re.sub(r'\bh[ưừ]m+\b', '[dissatisfaction-hnn]', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bhm+\b', '[dissatisfaction-hnn]', text, flags=re.IGNORECASE)
+    
+    # Surprise: oà, uoà, ồ
+    text = re.sub(r'\b[u]?[oò]à\b', '[surprise-wa]', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bồ+\b', '[surprise-oh]', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bá+\b', '[surprise-ah]', text, flags=re.IGNORECASE)
+    
+    return text
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d

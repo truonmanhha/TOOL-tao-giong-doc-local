@@ -3,6 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title OmniVoice Native App Local
 
+<<<<<<< HEAD
 :: --- CHỐNG CHẠY 100% GPU VÀ CPU ---
 set OMP_NUM_THREADS=1
 set MKL_NUM_THREADS=1
@@ -11,6 +12,8 @@ set OPENBLAS_NUM_THREADS=1
 set VECLIB_MAX_THREADS=1
 set CUDA_LAUNCH_BLOCKING=1
 
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 echo ========================================================
 echo         OMNIVOICE APP LOCAL - NATIVE DESKTOP
 echo ========================================================
@@ -33,10 +36,17 @@ set HUGGINGFACE_HUB_CACHE=%~dp0.cache\huggingface\hub
 set TRANSFORMERS_CACHE=%~dp0.cache\huggingface\transformers
 set TORCH_HOME=%~dp0.cache\torch
 
+<<<<<<< HEAD
 python -c "import PySide6, sounddevice, soundfile, imageio_ffmpeg, pydub, torch, qdarktheme" >nul 2>&1
 if errorlevel 1 (
     echo [*] Dang cai dat thu vien can thiet cho app native...
     python -m pip install PySide6 sounddevice soundfile imageio-ffmpeg pydub huggingface_hub pyqtdarktheme
+=======
+python -c "import PySide6, sounddevice, soundfile, imageio_ffmpeg, pydub, torch" >nul 2>&1
+if errorlevel 1 (
+    echo [*] Dang cai dat thu vien can thiet cho app native...
+    python -m pip install PySide6 sounddevice soundfile imageio-ffmpeg pydub huggingface_hub
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
     python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
     python -m pip install -e .
 )

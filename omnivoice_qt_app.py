@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿import argparse
+=======
+import argparse
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 import os
 import subprocess
 import sys
@@ -6,16 +10,27 @@ import tempfile
 import logging
 import time
 import traceback
+<<<<<<< HEAD
 import threading
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 from pathlib import Path
 
 import imageio_ffmpeg
 import numpy as np
+<<<<<<< HEAD
+=======
+import qdarktheme
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 import sounddevice as sd
 import soundfile as sf
 import torch
 from pydub import AudioSegment
+<<<<<<< HEAD
 from PySide6.QtCore import QPoint, Property, QRect, Qt, QThread, Signal, QTimer, QObject
+=======
+from PySide6.QtCore import QEasingCurve, QPoint, Property, QRect, QPropertyAnimation, Qt, QThread, Signal, QTimer, QObject
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -46,12 +61,16 @@ from PySide6.QtWidgets import (
 
 from omnivoice import OmniVoice, OmniVoiceGenerationConfig
 from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
+<<<<<<< HEAD
 from omnivoice.utils.text import (
     chunk_text_punctuation,
     ends_with_sensitive_vietnamese_term,
     map_vietnamese_emotions,
     normalize_vietnamese_numbers,
 )
+=======
+from omnivoice.utils.text import chunk_text_punctuation
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
 
 _ALL_LANGUAGES = ["Tự động"] + sorted(lang_display_name(n) for n in LANG_NAMES)
@@ -179,14 +198,22 @@ class TrimRangeSelector(QWidget):
         
         # Background
         painter.setPen(Qt.NoPen)
+<<<<<<< HEAD
         painter.setBrush(QColor(15, 23, 42))
+=======
+        painter.setBrush(QColor("#0f172a"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         painter.drawRoundedRect(track, 8, 8)
 
         # Waveform
         if self.waveform_data:
             num_bars = len(self.waveform_data)
             bar_width = track.width() / num_bars
+<<<<<<< HEAD
             painter.setBrush(QColor(51, 65, 85))
+=======
+            painter.setBrush(QColor("#334155"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             for i, val in enumerate(self.waveform_data):
                 bar_h = val * track.height() * 0.8
                 bar_rect = QRect(int(track.left() + i * bar_width), int(track.center().y() - bar_h / 2), int(max(1, bar_width - 1)), int(bar_h))
@@ -203,7 +230,11 @@ class TrimRangeSelector(QWidget):
         
         # Highlight selected waveform
         if self.waveform_data:
+<<<<<<< HEAD
             painter.setBrush(QColor(129, 140, 248))
+=======
+            painter.setBrush(QColor("#818cf8"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             for i, val in enumerate(self.waveform_data):
                 bar_x = int(track.left() + i * bar_width)
                 if start_x <= bar_x <= end_x:
@@ -213,16 +244,26 @@ class TrimRangeSelector(QWidget):
 
         # Handles
         for x, label in ((start_x, self.start_value), (end_x, self.end_value)):
+<<<<<<< HEAD
             painter.setBrush(QColor(248, 250, 252))
             painter.drawEllipse(QPoint(x, track.center().y()), 8, 8)
             painter.setPen(QColor(203, 213, 225))
+=======
+            painter.setBrush(QColor("#f8fafc"))
+            painter.drawEllipse(QPoint(x, track.center().y()), 8, 8)
+            painter.setPen(QColor("#cbd5e1"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             painter.drawText(x - 28, track.top() - 4, 56, 18, Qt.AlignCenter, f"{label:.1f}s")
             painter.setPen(Qt.NoPen)
             
         # Playhead (Red line)
         if self.playhead_value > 0 and self.playhead_value <= self.total_duration:
             ph_x = self._handle_x(self.playhead_value)
+<<<<<<< HEAD
             painter.setPen(QPen(QColor(239, 68, 68), 2))
+=======
+            painter.setPen(QPen(QColor("#ef4444"), 2))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             painter.drawLine(ph_x, track.top() - 5, ph_x, track.bottom() + 5)
 
     def mousePressEvent(self, event):
@@ -260,6 +301,7 @@ class GenerationWorker(QThread):
         self.model = model
         self.mode = mode
         self.payload = payload
+<<<<<<< HEAD
         self._is_cancelled = False
         self._cancel_event = threading.Event()
 
@@ -356,16 +398,30 @@ class GenerationWorker(QThread):
         if text[-1] not in ".!?":
             return text + "."
         return text
+=======
+
+    def _split_text_chunks(self, text: str) -> list[str]:
+        chunk_chars = int(self.payload.get("chunk_chars") or 0)
+        if chunk_chars <= 0 or len(text) <= chunk_chars:
+            return [text]
+        chunks = chunk_text_punctuation(text=text, chunk_len=chunk_chars, min_chunk_len=32)
+        return chunks or [text]
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
     def run(self):
         started_at = time.perf_counter()
         try:
+<<<<<<< HEAD
             self._raise_if_cancelled()
             if hasattr(self.model, "clear_generation_cancel"):
                 self.model.clear_generation_cancel()
             self.progress.emit("Đang kiểm tra dữ liệu đầu vào...", 5)
             if self.mode == "clone":
                 self._raise_if_cancelled()
+=======
+            self.progress.emit("Đang kiểm tra dữ liệu đầu vào...", 5)
+            if self.mode == "clone":
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                 self.progress.emit("Đang tạo prompt clone từ file mẫu...", 20)
                 prompt = self.model.create_voice_clone_prompt(
                     ref_audio=self.payload["ref_audio"],
@@ -378,7 +434,10 @@ class GenerationWorker(QThread):
                     "voice_clone_prompt": prompt,
                 }
             else:
+<<<<<<< HEAD
                 self._raise_if_cancelled()
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                 self.progress.emit("Đang chuẩn bị cấu hình thiết kế giọng...", 20)
                 kwargs = {
                     "text": self.payload["text"],
@@ -389,7 +448,10 @@ class GenerationWorker(QThread):
                     kwargs["instruct"] = self.payload["instruct"]
 
             self.progress.emit("Đang áp dụng tham số suy luận...", 40)
+<<<<<<< HEAD
             self._raise_if_cancelled()
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             if self.payload.get("speed") and self.payload["speed"] != 1.0:
                 kwargs["speed"] = self.payload["speed"]
             if self.payload.get("duration") and self.payload["duration"] > 0:
@@ -399,23 +461,40 @@ class GenerationWorker(QThread):
             generated_parts = []
             total_chunks = len(chunks)
             for index, chunk_text in enumerate(chunks, start=1):
+<<<<<<< HEAD
                 self._raise_if_cancelled()
                 chunk_kwargs = dict(kwargs)
                 prepared_chunk_text = self._prepare_chunk_text(chunk_text)
                 chunk_kwargs["text"] = prepared_chunk_text
                 print(f"[TEXT_CHUNK] {index}/{total_chunks}: {prepared_chunk_text}")
+=======
+                chunk_kwargs = dict(kwargs)
+                
+                # Fix AI đọc dấu chấm thành "ráp" / "chấm"
+                clean_text = chunk_text.replace("...", ",")
+                clean_text = clean_text.replace(". ", ", ")
+                if clean_text.endswith("."):
+                    clean_text = clean_text[:-1] + ","
+                    
+                chunk_kwargs["text"] = clean_text
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                 progress_value = 45 + int((index - 1) / max(total_chunks, 1) * 45)
                 self.progress.emit(
                     f"Đang chạy chunk {index}/{total_chunks} ({len(chunk_text)} ký tự)...",
                     progress_value,
                 )
+<<<<<<< HEAD
                 chunk_audio = self.model.generate(cancel_event=self._cancel_event, **chunk_kwargs)[0]
                 self._raise_if_cancelled()
+=======
+                chunk_audio = self.model.generate(**chunk_kwargs)[0]
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                 generated_parts.append(chunk_audio)
 
             if len(generated_parts) == 1:
                 final_audio = generated_parts[0]
             else:
+<<<<<<< HEAD
                 pause = np.zeros(int(self.model.sampling_rate * 0.05), dtype=generated_parts[0].dtype)
                 with_pauses = []
                 for part in generated_parts:
@@ -429,6 +508,9 @@ class GenerationWorker(QThread):
             except Exception:
                 pass
                 
+=======
+                final_audio = np.concatenate(generated_parts, axis=-1)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             elapsed_s = time.perf_counter() - started_at
             meta = {
                 "ref_audio": self.payload.get("ref_audio"),
@@ -445,7 +527,10 @@ class GenerationWorker(QThread):
                 "chunk_chars": self.payload.get("chunk_chars"),
             }
             self.progress.emit("Đang hoàn tất kết quả...", 95)
+<<<<<<< HEAD
             self._raise_if_cancelled()
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             self.success.emit(final_audio, meta)
         except Exception as exc:
             self.error.emit(str(exc), traceback.format_exc())
@@ -483,10 +568,13 @@ class OmniVoiceQtWindow(QMainWindow):
         self.current_source = ""
         self.duration_seconds = 10.0
         self.worker = None
+<<<<<<< HEAD
         self.active_mode = None
         self._worker_token_seed = 0
         self._active_worker_token = None
         self._finished_workers = []
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.is_playing = False
         self._runtime_state = {
             "clone": {"started_at": None, "payload": None},
@@ -499,6 +587,7 @@ class OmniVoiceQtWindow(QMainWindow):
         self._apply_style()
         self._build_ui()
         self._refresh_runtime_badge()
+<<<<<<< HEAD
 
     def _apply_style(self):
         qss_path = os.path.join(os.path.dirname(__file__), 'style.qss')
@@ -509,6 +598,152 @@ class OmniVoiceQtWindow(QMainWindow):
             print(f"Warning: Could not load style.qss from {qss_path}: {e}")
             # Fallback minimal style so it remains usable
             self.setStyleSheet("QWidget { background: #05070b; color: #f4f7fb; }")
+=======
+        self._nav_buttons = []
+
+    def _apply_style(self):
+        self.setStyleSheet(
+            """
+            QWidget {
+                background: #000000;
+                color: #ffffff;
+                font-family: "BMWTypeNextLatin", "Inter", sans-serif;
+                font-size: 14px;
+            }
+            QFrame#Card {
+                background: #1a1a1a;
+                border: 1px solid #3c3c3c;
+                border-radius: 0px;
+            }
+            QPushButton {
+                background: #1a1a1a;
+                border: 1px solid #3c3c3c;
+                border-radius: 0px;
+                padding: 10px 16px;
+                color: #ffffff;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+            }
+            QPushButton:hover {
+                background: #262626;
+                border: 1px solid #ffffff;
+            }
+            QPushButton:pressed {
+                background: #000000;
+            }
+            QPushButton:disabled {
+                background: #0d0d0d;
+                color: #7e7e7e;
+                border: 1px solid #1a1a1a;
+            }
+            QPushButton#PrimaryBtn {
+                background: #000000;
+                border: 1px solid #ffffff;
+                color: #ffffff;
+                font-weight: 700;
+            }
+            QPushButton#PrimaryBtn:hover {
+                background: #1a1a1a;
+            }
+            QPushButton#PrimaryBtn:disabled {
+                background: #1a1a1a;
+                color: #7e7e7e;
+                border: 1px solid #3c3c3c;
+            }
+            QPushButton#NavBtn {
+                background: transparent;
+                border: none;
+                color: #bbbbbb;
+                text-align: left;
+                padding-left: 20px;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            QPushButton#NavBtn:hover {
+                color: #ffffff;
+                background: #1a1a1a;
+            }
+            QPushButton#NavBtnActive {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0066b1, stop:0.5 #1c69d4, stop:1 #e22718);
+                border: none;
+                color: white;
+                text-align: left;
+                padding-left: 20px;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            QLineEdit, QPlainTextEdit, QComboBox, QDoubleSpinBox, QSpinBox {
+                background: #1a1a1a;
+                border: 1px solid #3c3c3c;
+                border-radius: 0px;
+                padding: 10px;
+                color: #ffffff;
+            }
+            QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {
+                border: 1px solid #ffffff;
+                background: #262626;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #bbbbbb;
+                margin-right: 10px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1a1a1a;
+                border: 1px solid #3c3c3c;
+                selection-background-color: #0066b1;
+                border-radius: 0px;
+            }
+            QLabel#Title { font-size: 32px; font-weight: 700; color: white; text-transform: uppercase; }
+            QLabel#SubTitle { color: #bbbbbb; font-size: 14px; font-weight: 300; }
+            QLabel#SectionTitle { font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; }
+            QProgressBar {
+                background: #1a1a1a;
+                border: none;
+                border-radius: 0px;
+                text-align: center;
+                height: 12px;
+                color: transparent;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0066b1, stop:0.5 #1c69d4, stop:1 #e22718);
+                border-radius: 0px;
+            }
+            QSlider::groove:horizontal {
+                border-radius: 0px;
+                height: 8px;
+                background: #3c3c3c;
+            }
+            QSlider::handle:horizontal {
+                background: #1c69d4;
+                width: 16px;
+                height: 16px;
+                margin: -4px 0;
+                border-radius: 0px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #0066b1;
+                border-radius: 0px;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #000000;
+                width: 10px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #3c3c3c;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+            """
+        )
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
     def _on_device_changed(self, text: str):
         if text == "Tự động":
@@ -539,6 +774,7 @@ class OmniVoiceQtWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         main_layout = QVBoxLayout(root)
+<<<<<<< HEAD
         # main_layout.setContentsMargins(0, 0, 0, 0)
         # main_layout.setSpacing(0)
 
@@ -557,6 +793,27 @@ class OmniVoiceQtWindow(QMainWindow):
         self.runtime_badge = QLabel("")
         self.runtime_badge.setAlignment(Qt.AlignCenter)
         self.runtime_badge.setObjectName("RuntimeBadge")
+=======
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Header banner
+        header = QFrame()
+        header.setStyleSheet("background: #000000; border-bottom: 4px solid qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0066b1, stop:0.5 #1c69d4, stop:1 #e22718);")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(20, 30, 20, 30)
+        title = QLabel("🎙️ OmniVoice Pro")
+        title.setStyleSheet("font-size: 36px; font-weight: 800; color: white;")
+        title.setAlignment(Qt.AlignCenter)
+        subtitle = QLabel("Phần mềm giả lập & Thiết kế giọng nói AI Đỉnh cao (Chạy 100% Local Offline)")
+        subtitle.setStyleSheet("font-size: 16px; color: #e0e7ff; font-weight: 500;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        self.runtime_badge = QLabel("")
+        self.runtime_badge.setAlignment(Qt.AlignCenter)
+        self.runtime_badge.setStyleSheet(
+            "font-size: 13px; font-weight: 700; color: white; background: rgba(15,23,42,0.28); padding: 8px 14px; border-radius: 12px;"
+        )
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         header_layout.addWidget(title)
         header_layout.addWidget(subtitle)
         
@@ -566,7 +823,13 @@ class OmniVoiceQtWindow(QMainWindow):
         
         self.device_combo = QComboBox()
         self.device_combo.addItems(["Tự động", "CPU", "CUDA"])
+<<<<<<< HEAD
         self.device_combo.setObjectName("DeviceCombo")
+=======
+        self.device_combo.setStyleSheet(
+            "font-size: 13px; font-weight: 700; color: white; background: #000000; padding: 6px 10px; border-radius: 0px; border: 1px solid #3c3c3c; text-transform: uppercase;"
+        )
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.device_combo.setToolTip("Chọn thiết bị xử lý AI. CUDA sẽ nhanh hơn rất nhiều.")
         self.device_combo.currentTextChanged.connect(self._on_device_changed)
         badge_row.addWidget(self.device_combo)
@@ -598,19 +861,36 @@ class OmniVoiceQtWindow(QMainWindow):
         self.postprocess.setChecked(True)
 
         self.tabs = QTabWidget()
+<<<<<<< HEAD
         self.tabs.setObjectName("MainTabs")
+=======
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane { border: none; background: #000000; }
+            QTabBar::tab { background: #000000; color: #bbbbbb; padding: 16px 32px; font-size: 16px; font-weight: 700; border-radius: 0px; margin-right: 4px; margin-top: 16px; text-transform: uppercase; }
+            QTabBar::tab:selected { background: #000000; color: #ffffff; border-bottom: 4px solid; border-image: linear-gradient(to right, #0066b1 33%, #1c69d4 33% 66%, #e22718 66%) 1; }
+            QTabBar::tab:hover:!selected { background: #1a1a1a; }
+        """)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
         clone_scroll = QScrollArea()
         clone_scroll.setWidgetResizable(True)
         clone_scroll.setFrameShape(QFrame.NoFrame)
         clone_scroll.setWidget(self._build_clone_page())
+<<<<<<< HEAD
         self.tabs.addTab(clone_scroll, "Clone Giọng Nói (Sao chép)")
+=======
+        self.tabs.addTab(clone_scroll, "🎭 Clone Giọng Nói (Sao chép)")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
         design_scroll = QScrollArea()
         design_scroll.setWidgetResizable(True)
         design_scroll.setFrameShape(QFrame.NoFrame)
         design_scroll.setWidget(self._build_design_page())
+<<<<<<< HEAD
         self.tabs.addTab(design_scroll, "Thiết Kế Giọng (Tạo giọng mới)")
+=======
+        self.tabs.addTab(design_scroll, "🧬 Thiết Kế Giọng (Tạo giọng mới)")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
         main_layout.addWidget(self.tabs)
 
@@ -626,6 +906,7 @@ class OmniVoiceQtWindow(QMainWindow):
         label.setWordWrap(wrap)
         return label
 
+<<<<<<< HEAD
     def _panel_badge(self, text: str):
         badge = QLabel(text)
         badge.setObjectName("PanelBadge")
@@ -724,6 +1005,13 @@ class OmniVoiceQtWindow(QMainWindow):
         # settings_l.setContentsMargins(24, 24, 24, 24)
         # settings_l.setSpacing(14)
         settings_l.addWidget(self._label("Cài đặt nâng cao", "SectionTitle"))
+=======
+    def _build_settings_group(self, prefix: str):
+        settings_card = self._card()
+        settings_l = QVBoxLayout(settings_card)
+        settings_l.setContentsMargins(24, 24, 24, 24)
+        settings_l.addWidget(self._label("⚙️ Cài đặt Nâng cao", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         
         speed = QDoubleSpinBox()
         speed.setRange(0.5, 2.0)
@@ -759,6 +1047,7 @@ class OmniVoiceQtWindow(QMainWindow):
         setattr(self, f"{prefix}_preprocess", preprocess)
         setattr(self, f"{prefix}_postprocess", postprocess)
 
+<<<<<<< HEAD
         form_grid = QGridLayout()
         form_grid.setHorizontalSpacing(12)
         form_grid.setVerticalSpacing(10)
@@ -778,14 +1067,39 @@ class OmniVoiceQtWindow(QMainWindow):
         row3.addWidget(preprocess)
         row3.addWidget(postprocess)
         row3.addStretch(1)
+=======
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Tốc độ đọc:"))
+        row1.addWidget(speed)
+        row1.addWidget(QLabel("Ép thời lượng (s):"))
+        row1.addWidget(duration)
+        settings_l.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Bước Inference:"))
+        row2.addWidget(num_step)
+        row2.addWidget(QLabel("Mức tuân thủ CFG:"))
+        row2.addWidget(guidance)
+        settings_l.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        row3.addWidget(denoise)
+        row3.addWidget(preprocess)
+        row3.addWidget(postprocess)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         settings_l.addLayout(row3)
         return settings_card
 
     def _build_clone_page(self):
         page = QWidget()
         layout = QHBoxLayout(page)
+<<<<<<< HEAD
         # layout.setContentsMargins(28, 28, 28, 28)
         # layout.setSpacing(20)
+=======
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(24)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         layout.setAlignment(Qt.AlignTop)
 
         left_col = QVBoxLayout()
@@ -793,6 +1107,7 @@ class OmniVoiceQtWindow(QMainWindow):
 
         c1 = self._card()
         c1_l = QVBoxLayout(c1)
+<<<<<<< HEAD
         # c1_l.setContentsMargins(24, 24, 24, 24)
         # c1_l.setSpacing(12)
         c1_l.addWidget(self._panel_badge("Bước 1 · Nhập nội dung"), alignment=Qt.AlignLeft)
@@ -803,21 +1118,38 @@ class OmniVoiceQtWindow(QMainWindow):
         self.clone_text.setMaximumHeight(220)
         c1_l.addWidget(self.clone_text)
         c1_l.addLayout(self._nonverbal_bar(self.clone_text, lambda: None if self.clone_lang.currentText() == "Tự động" else self.clone_lang.currentText()))
+=======
+        c1_l.setContentsMargins(24, 24, 24, 24)
+        c1_l.addWidget(self._label("📝 Nội dung cần đọc", "SectionTitle"))
+        self.clone_text = QPlainTextEdit()
+        self.clone_text.setPlaceholderText("Nhập văn bản bạn muốn chuyển thành giọng nói vào đây...\nVí dụ: Xin chào mọi người, hôm nay thời tiết rất đẹp!")
+        self.clone_text.setMinimumHeight(120)
+        c1_l.addWidget(self.clone_text)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         left_col.addWidget(c1)
 
         c2 = self._card()
         c2_l = QVBoxLayout(c2)
+<<<<<<< HEAD
         # c2_l.setContentsMargins(24, 24, 24, 24)
         # c2_l.setSpacing(12)
         c2_l.addWidget(self._panel_badge("Bước 2 · Chọn mẫu"), alignment=Qt.AlignLeft)
         c2_l.addWidget(self._label("Âm thanh gốc (Giọng mẫu)", "SectionTitle"))
+=======
+        c2_l.setContentsMargins(24, 24, 24, 24)
+        c2_l.addWidget(self._label("🎧 Âm thanh gốc (Giọng mẫu)", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         c2_l.addWidget(self._label("Tải lên 1 đoạn ghi âm giọng nói mà bạn muốn AI bắt chước (Nên dài từ 3 đến 10 giây và rõ lời).", "SubTitle", True))
         
         file_row = QHBoxLayout()
         self.clone_file = QLineEdit()
         self.clone_file.setReadOnly(True)
         self.clone_file.setPlaceholderText("Chưa chọn file audio/video nào...")
+<<<<<<< HEAD
         browse_btn = QPushButton("Chọn File")
+=======
+        browse_btn = QPushButton("📁 Chọn File")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         browse_btn.setMinimumHeight(40)
         browse_btn.clicked.connect(self._browse_source)
         file_row.addWidget(self.clone_file, 1)
@@ -830,13 +1162,21 @@ class OmniVoiceQtWindow(QMainWindow):
         self.media_player.positionChanged.connect(self._on_player_position_changed)
         
         # We only need the audio trimmer visualizer now to mimic Gradio's gr.Audio
+<<<<<<< HEAD
         c2_l.addWidget(self._label("Kéo cắt đoạn dùng để clone", "SectionTitle"))
+=======
+        c2_l.addWidget(self._label("✂️ Kéo cắt đoạn dùng để clone", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.range_selector = TrimRangeSelector()
         self.range_selector.changed.connect(self._sync_trim_spinboxes)
         c2_l.addWidget(self.range_selector)
 
         trim_row = QHBoxLayout()
+<<<<<<< HEAD
         self.preview_play_btn = QPushButton("Phát đoạn đã cắt")
+=======
+        self.preview_play_btn = QPushButton("▶ Phát đoạn đã cắt")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.preview_play_btn.clicked.connect(self._toggle_media_preview)
         
         self.trim_start = QDoubleSpinBox()
@@ -860,32 +1200,49 @@ class OmniVoiceQtWindow(QMainWindow):
         c2_l.addWidget(self._label("Lời của đoạn ghi âm mẫu (Tùy chọn, để trống AI sẽ tự nghe):", "SubTitle"))
         self.clone_ref_text = QPlainTextEdit()
         self.clone_ref_text.setPlaceholderText("Nhập lời thoại của đoạn âm thanh trên (nếu máy yếu tắt ASR).")
+<<<<<<< HEAD
         self.clone_ref_text.setMinimumHeight(74)
         self.clone_ref_text.setMaximumHeight(90)
+=======
+        self.clone_ref_text.setMaximumHeight(60)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         c2_l.addWidget(self.clone_ref_text)
         left_col.addWidget(c2)
 
         c3 = self._card()
         c3_l = QVBoxLayout(c3)
+<<<<<<< HEAD
         # c3_l.setContentsMargins(24, 24, 24, 24)
         # c3_l.setSpacing(10)
         c3_l.addWidget(self._panel_badge("Bước 3 · Ngôn ngữ"), alignment=Qt.AlignLeft)
         c3_l.addWidget(self._label("Ngôn ngữ đích & Tùy chỉnh", "SectionTitle"))
+=======
+        c3_l.setContentsMargins(24, 24, 24, 24)
+        c3_l.addWidget(self._label("🌐 Ngôn ngữ đích & Tùy chỉnh", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.clone_lang = QComboBox()
         self.clone_lang.addItems(_ALL_LANGUAGES)
         c3_l.addWidget(self.clone_lang)
         left_col.addWidget(c3)
 
+<<<<<<< HEAD
         clone_settings = self._build_settings_group("clone")
         left_col.addWidget(clone_settings)
         left_col.addStretch(1)
 
         right_col = QVBoxLayout()
         right_col.setSpacing(14)
+=======
+        left_col.addWidget(self._build_settings_group("clone"))
+
+        right_col = QVBoxLayout()
+        right_col.setSpacing(16)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         right_col.setAlignment(Qt.AlignTop)
 
         r1 = self._card()
         r1_l = QVBoxLayout(r1)
+<<<<<<< HEAD
         # r1_l.setContentsMargins(24, 24, 24, 24)
         # r1_l.setSpacing(12)
         r1_l.addWidget(self._panel_badge("Bước 4 · Tạo & xuất"), alignment=Qt.AlignLeft)
@@ -909,6 +1266,20 @@ class OmniVoiceQtWindow(QMainWindow):
         r1_l.addWidget(self._label("Kết Quả", "SectionTitle"))
         self.clone_status = QLabel("Trạng thái hệ thống: Sẵn sàng")
         self.clone_status.setWordWrap(True)
+=======
+        r1_l.setContentsMargins(24, 24, 24, 24)
+        r1_l.addWidget(self._label("🚀 Xuất File", "SectionTitle"))
+        self.clone_generate_btn = QPushButton("✨ BẮT ĐẦU TẠO GIỌNG")
+        self.clone_generate_btn.setObjectName("PrimaryBtn")
+        self.clone_generate_btn.setMinimumHeight(60)
+        self.clone_generate_btn.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.clone_generate_btn.clicked.connect(self._start_clone_generation)
+        r1_l.addWidget(self.clone_generate_btn)
+        
+        r1_l.addSpacing(24)
+        r1_l.addWidget(self._label("🔊 Kết Quả", "SectionTitle"))
+        self.clone_status = QLabel("Trạng thái hệ thống: Sẵn sàng")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         r1_l.addWidget(self.clone_status)
 
         self.clone_progress = QProgressBar()
@@ -918,13 +1289,19 @@ class OmniVoiceQtWindow(QMainWindow):
 
         self.clone_info = QPlainTextEdit()
         self.clone_info.setReadOnly(True)
+<<<<<<< HEAD
         self.clone_info.setMinimumHeight(132)
         self.clone_info.setMaximumHeight(220)
+=======
+        self.clone_info.setMinimumHeight(100)
+        self.clone_info.setMaximumHeight(200)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         r1_l.addWidget(self.clone_info)
         
         self.clone_log_info = QPlainTextEdit()
         self.clone_log_info.setReadOnly(True)
         self.clone_log_info.setPlaceholderText("Log xử lý...")
+<<<<<<< HEAD
         self.clone_log_info.setMinimumHeight(150)
         self.clone_log_info.setMaximumHeight(220)
         r1_l.addWidget(self.clone_log_info)
@@ -935,6 +1312,17 @@ class OmniVoiceQtWindow(QMainWindow):
         self.play_result_btn.setMinimumHeight(40)
         self.play_result_btn.clicked.connect(self._toggle_generated_audio)
         self.save_result_btn = QPushButton("Tải xuống WAV")
+=======
+        self.clone_log_info.setMaximumHeight(150)
+        r1_l.addWidget(self.clone_log_info)
+
+        action_row = QHBoxLayout()
+        self.play_result_btn = QPushButton("▶ Phát Audio")
+        self.play_result_btn.setEnabled(False)
+        self.play_result_btn.setMinimumHeight(40)
+        self.play_result_btn.clicked.connect(self._toggle_generated_audio)
+        self.save_result_btn = QPushButton("💾 Tải xuống WAV")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.save_result_btn.setEnabled(False)
         self.save_result_btn.setMinimumHeight(40)
         self.save_result_btn.clicked.connect(self._save_output)
@@ -943,15 +1331,22 @@ class OmniVoiceQtWindow(QMainWindow):
         r1_l.addLayout(action_row)
 
         right_col.addWidget(r1)
+<<<<<<< HEAD
         right_col.addStretch(1)
 
         layout.addLayout(left_col, 7)
         layout.addLayout(right_col, 5)
+=======
+
+        layout.addLayout(left_col, 5)
+        layout.addLayout(right_col, 4)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         return page
 
     def _build_design_page(self):
         page = QWidget()
         layout = QHBoxLayout(page)
+<<<<<<< HEAD
         # layout.setContentsMargins(28, 28, 28, 28)
         # layout.setSpacing(20)
 
@@ -978,6 +1373,125 @@ class OmniVoiceQtWindow(QMainWindow):
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(10)
+=======
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(24)
+        layout.setAlignment(Qt.AlignTop)
+
+        left_col = QVBoxLayout()
+        left_col.setSpacing(16)
+
+        c1 = self._card()
+        c1_l = QVBoxLayout(c1)
+        c1_l.setContentsMargins(24, 24, 24, 24)
+        c1_l.addWidget(self._label("📝 Nội dung cần đọc", "SectionTitle"))
+        self.design_text = QPlainTextEdit()
+        self.design_text.setPlainText("Xin chào, đây là giọng nhân vật ảo trên bản desktop mới.")
+        self.design_text.setMinimumHeight(120)
+        c1_l.addWidget(self.design_text)
+        left_col.addWidget(c1)
+
+        c2 = self._card()
+        c2_l = QVBoxLayout(c2)
+        c2_l.setContentsMargins(24, 24, 24, 24)
+        c2_l.addWidget(self._label("🎛️ Tùy chỉnh nhân vật", "SectionTitle"))
+        c2_l.addWidget(self._label("Ngôn ngữ", "SubTitle"))
+        self.design_lang = QComboBox()
+        self.design_lang.addItems(_ALL_LANGUAGES)
+        c2_l.addWidget(self.design_lang)
+        
+        c2_l.addSpacing(10)
+        self.design_menus = {}
+        grid = QGridLayout()
+        idx = 0
+        for label, values in _CATEGORIES.items():
+            combo = QComboBox()
+            combo.addItems(["Tự động"] + values)
+            self.design_menus[label] = combo
+            row = idx // 2
+            col = (idx % 2) * 2
+            lbl = QLabel(label)
+            lbl.setObjectName("SubTitle")
+            grid.addWidget(lbl, row * 2, col)
+            grid.addWidget(combo, row * 2 + 1, col)
+            idx += 1
+        c2_l.addLayout(grid)
+        left_col.addWidget(c2)
+
+        left_col.addWidget(self._build_settings_group("design"))
+
+        right_col = QVBoxLayout()
+        right_col.setSpacing(16)
+        right_col.setAlignment(Qt.AlignTop)
+
+        r1 = self._card()
+        r1_l = QVBoxLayout(r1)
+        r1_l.setContentsMargins(24, 24, 24, 24)
+        r1_l.addWidget(self._label("🚀 Xuất File", "SectionTitle"))
+        self.design_generate_btn = QPushButton("✨ BẮT ĐẦU TẠO GIỌNG")
+        self.design_generate_btn.setObjectName("PrimaryBtn")
+        self.design_generate_btn.setMinimumHeight(56)
+        self.design_generate_btn.setStyleSheet("font-size: 18px;")
+        self.design_generate_btn.clicked.connect(self._start_design_generation)
+        r1_l.addWidget(self.design_generate_btn)
+
+        r1_l.addSpacing(24)
+        r1_l.addWidget(self._label("🔊 Kết Quả", "SectionTitle"))
+        self.design_status = QLabel("Trạng thái hệ thống: Sẵn sàng")
+        r1_l.addWidget(self.design_status)
+
+        self.design_info = QPlainTextEdit()
+        self.design_info.setReadOnly(True)
+        self.design_info.setMinimumHeight(80)
+        self.design_info.setMaximumHeight(150)
+        right_l.addWidget(self.design_info)
+
+        self.design_log_info = QPlainTextEdit()
+        self.design_log_info.setReadOnly(True)
+        self.design_log_info.setPlaceholderText("Log xử lý...")
+        self.design_log_info.setMaximumHeight(150)
+        right_l.addWidget(self.design_log_info)
+
+        action_row = QHBoxLayout()
+        self.design_play_btn = QPushButton("▶ Phát Audio")
+        self.design_play_btn.setEnabled(False)
+        self.design_play_btn.setMinimumHeight(40)
+        self.design_play_btn.clicked.connect(self._toggle_generated_audio)
+        self.design_save_btn = QPushButton("💾 Tải xuống WAV")
+        self.design_save_btn.setEnabled(False)
+        self.design_save_btn.setMinimumHeight(40)
+        self.design_save_btn.clicked.connect(self._save_output)
+        action_row.addWidget(self.design_play_btn, 2)
+        action_row.addWidget(self.design_save_btn, 1)
+        r1_l.addLayout(action_row)
+
+        right_col.addWidget(r1)
+
+        layout.addLayout(left_col, 5)
+        layout.addLayout(right_col, 4)
+        return page
+
+    def _build_design_page(self):
+        page = QWidget()
+        layout = QHBoxLayout(page)
+        layout.setSpacing(16)
+
+        left = self._card()
+        left_l = QVBoxLayout(left)
+        left_l.setContentsMargins(24, 24, 24, 24)
+        left_l.addWidget(self._label("📝 Nội dung cần đọc", "SectionTitle"))
+        self.design_text = QPlainTextEdit()
+        self.design_text.setPlainText("Xin chào, đây là giọng nhân vật ảo trên bản desktop mới.")
+        left_l.addWidget(self.design_text)
+        self.design_lang = QComboBox()
+        self.design_lang.addItems(_ALL_LANGUAGES)
+        left_l.addWidget(self._label("🌐 Ngôn ngữ", "SectionTitle"))
+        left_l.addWidget(self.design_lang)
+
+        left_l.addWidget(self._label("🎛️ Tùy chỉnh nhân vật", "SectionTitle"))
+        self.design_menus = {}
+        grid = QGridLayout()
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         idx = 0
         for label, values in _CATEGORIES.items():
             combo = QComboBox()
@@ -989,6 +1503,7 @@ class OmniVoiceQtWindow(QMainWindow):
             grid.addWidget(combo, row, col + 1)
             idx += 1
         left_l.addLayout(grid)
+<<<<<<< HEAD
         left_l.addWidget(self._build_settings_group("design"))
 
         self.design_generate_btn = QPushButton("BẮT ĐẦU TẠO GIỌNG")
@@ -1017,13 +1532,30 @@ class OmniVoiceQtWindow(QMainWindow):
         self.design_info.setReadOnly(True)
         self.design_info.setMinimumHeight(132)
         self.design_info.setMaximumHeight(220)
+=======
+        self.design_generate_btn = QPushButton("✨ BẮT ĐẦU TẠO GIỌNG")
+        self.design_generate_btn.setObjectName("PrimaryBtn")
+        self.design_generate_btn.clicked.connect(self._start_design_generation)
+        left_l.addWidget(self.design_generate_btn)
+
+        right = self._card()
+        right_l = QVBoxLayout(right)
+        right_l.setContentsMargins(24, 24, 24, 24)
+        self.design_status = QLabel("Chưa tạo")
+        self.design_info = QPlainTextEdit()
+        self.design_info.setReadOnly(True)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.design_play_btn = QPushButton("Phát kết quả")
         self.design_play_btn.setEnabled(False)
         self.design_play_btn.clicked.connect(self._toggle_generated_audio)
         self.design_save_btn = QPushButton("Lưu WAV")
         self.design_save_btn.setEnabled(False)
         self.design_save_btn.clicked.connect(self._save_output)
+<<<<<<< HEAD
         right_l.addWidget(self._label("Kết quả thiết kế giọng", "SectionTitle"))
+=======
+        right_l.addWidget(self._label("🔊 Kết quả thiết kế giọng", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         right_l.addWidget(self.design_status)
 
         self.design_progress = QProgressBar()
@@ -1036,6 +1568,7 @@ class OmniVoiceQtWindow(QMainWindow):
         self.design_log_info = QPlainTextEdit()
         self.design_log_info.setReadOnly(True)
         self.design_log_info.setPlaceholderText("Log xử lý...")
+<<<<<<< HEAD
         self.design_log_info.setMinimumHeight(150)
         self.design_log_info.setMaximumHeight(220)
         right_l.addWidget(self.design_log_info)
@@ -1056,6 +1589,43 @@ class OmniVoiceQtWindow(QMainWindow):
         layout = QVBoxLayout(page)
         # layout.setContentsMargins(24, 24, 24, 24)
         layout.addWidget(self._label("Cài Đặt Nâng Cao", "SectionTitle"))
+=======
+        self.design_log_info.setMaximumHeight(170)
+        right_l.addWidget(self.design_log_info)
+
+        right_l.addWidget(self.design_play_btn)
+        right_l.addWidget(self.design_save_btn)
+
+        layout.addWidget(left, 5)
+        layout.addWidget(right, 4)
+        return page
+
+    def _switch_page(self, index: int):
+        current = self.stack.currentWidget()
+        self.stack.setCurrentIndex(index)
+        for i, btn in enumerate(self._nav_buttons):
+            if i == index:
+                btn.setObjectName("NavBtnActive")
+            else:
+                btn.setObjectName("NavBtn")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+        page = self.stack.currentWidget()
+        page.setWindowOpacity(0.0)
+        animation = QPropertyAnimation(page, b"windowOpacity", self)
+        animation.setDuration(220)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.OutCubic)
+        animation.start()
+        self._page_animation = animation
+
+    def _build_settings_page(self):
+        page = self._card()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.addWidget(self._label("⚙️ Cài Đặt Nâng Cao", "SectionTitle"))
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
         self.num_step = QSpinBox()
         self.num_step.setRange(4, 64)
@@ -1151,18 +1721,30 @@ class OmniVoiceQtWindow(QMainWindow):
     def _toggle_media_preview(self):
         if self.media_player.playbackState() == QMediaPlayer.PlayingState:
             self.media_player.pause()
+<<<<<<< HEAD
             self.preview_play_btn.setText("Phát đoạn đã cắt")
         else:
             self.media_player.setPosition(int(self.trim_start.value() * 1000))
             self.media_player.play()
             self.preview_play_btn.setText("Dừng")
+=======
+            self.preview_play_btn.setText("▶ Phát đoạn đã cắt")
+        else:
+            self.media_player.setPosition(int(self.trim_start.value() * 1000))
+            self.media_player.play()
+            self.preview_play_btn.setText("⏸ Dừng")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
     def _on_player_position_changed(self, pos_ms: int):
         pos_sec = pos_ms / 1000.0
         self.range_selector.set_playhead(pos_sec)
         if pos_sec >= self.trim_end.value() and self.media_player.playbackState() == QMediaPlayer.PlayingState:
             self.media_player.pause()
+<<<<<<< HEAD
             self.preview_play_btn.setText("Phát đoạn đã cắt")
+=======
+            self.preview_play_btn.setText("▶ Phát đoạn đã cắt")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             self.range_selector.set_playhead(0)
 
     def _sync_trim_spinboxes(self, start_value: float, end_value: float):
@@ -1264,32 +1846,47 @@ class OmniVoiceQtWindow(QMainWindow):
         self._run_worker("design", payload)
 
     def _run_worker(self, mode: str, payload: dict):
+<<<<<<< HEAD
         if self.worker and self.worker.isRunning():
             QMessageBox.information(self, "Đang bận", "Hiện đang có một tác vụ tạo giọng chạy rồi. Hãy đợi xong hoặc bấm Hủy.")
             return
         self._worker_token_seed += 1
         worker_token = self._worker_token_seed
         self._active_worker_token = worker_token
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self._runtime_state[mode] = {
             "started_at": time.perf_counter(),
             "payload": payload.copy(),
         }
+<<<<<<< HEAD
         self.active_mode = mode
         if mode == "clone":
             self.clone_generate_btn.setText("ĐANG XỬ LÝ...")
+=======
+        if mode == "clone":
+            self.clone_generate_btn.setText("⏳ ĐANG XỬ LÝ...")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             self.clone_status.setText("Trạng thái hệ thống: Đang chạy...")
             self.clone_progress.setValue(1)
             self.clone_log_info.clear()
             self.clone_info.setPlainText(self._build_runtime_summary(mode, payload))
+<<<<<<< HEAD
             self.clone_cancel_btn.setEnabled(True)
             self.design_generate_btn.setEnabled(False)
             self._log_event(mode, "INFO", "Đã bắt đầu job clone giọng.")
         else:
             self.design_generate_btn.setText("ĐANG XỬ LÝ...")
+=======
+            self._log_event(mode, "INFO", "Đã bắt đầu job clone giọng.")
+        else:
+            self.design_generate_btn.setText("⏳ ĐANG XỬ LÝ...")
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             self.design_status.setText("Trạng thái hệ thống: Đang chạy...")
             self.design_progress.setValue(1)
             self.design_log_info.clear()
             self.design_info.setPlainText(self._build_runtime_summary(mode, payload))
+<<<<<<< HEAD
             self.design_cancel_btn.setEnabled(True)
             self.clone_generate_btn.setEnabled(False)
             self._log_event(mode, "INFO", "Đã bắt đầu job thiết kế giọng.")
@@ -1344,6 +1941,17 @@ class OmniVoiceQtWindow(QMainWindow):
     def _update_progress(self, mode: str, text: str, value: int, worker_token: int | None = None):
         if worker_token is not None and worker_token != self._active_worker_token:
             return
+=======
+            self._log_event(mode, "INFO", "Đã bắt đầu job thiết kế giọng.")
+            
+        self.worker = GenerationWorker(self.model, mode, payload)
+        self.worker.progress.connect(lambda text, val, m=mode: self._update_progress(m, text, val))
+        self.worker.success.connect(lambda audio, meta, m=mode: self._on_worker_success(m, audio, meta))
+        self.worker.error.connect(lambda message, detail, m=mode: self._on_worker_error(m, message, detail))
+        self.worker.start()
+
+    def _update_progress(self, mode: str, text: str, value: int):
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         if mode == "clone":
             self.clone_status.setText("Trạng thái hệ thống: " + text)
             self.clone_progress.setValue(value)
@@ -1352,11 +1960,15 @@ class OmniVoiceQtWindow(QMainWindow):
             self.design_progress.setValue(value)
         self._log_event(mode, "STEP", f"[{value}%] {text}")
 
+<<<<<<< HEAD
     def _on_worker_success(self, mode: str, audio, meta: dict, worker_token: int | None = None):
         if worker_token is not None and worker_token != self._active_worker_token:
             return
         self._active_worker_token = None
         self._reset_generation_ui(mode)
+=======
+    def _on_worker_success(self, mode: str, audio, meta: dict):
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
         self.audio_output = audio
         elapsed_s = meta.get("elapsed_s") or self._elapsed_for_mode(mode)
         if mode == "clone":
@@ -1364,9 +1976,17 @@ class OmniVoiceQtWindow(QMainWindow):
             self.clone_progress.setValue(100)
             self.play_result_btn.setEnabled(True)
             self.save_result_btn.setEnabled(True)
+<<<<<<< HEAD
             self.clone_info.setPlainText(
                 "\n".join([
                     "Đã clone giọng xong.",
+=======
+            self.clone_generate_btn.setEnabled(True)
+            self.clone_generate_btn.setText("✨ BẮT ĐẦU TẠO GIỌNG")
+            self.clone_info.setPlainText(
+                "\n".join([
+                    "✅ Đã clone giọng xong.",
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                     "",
                     f"Thiết bị: {self._device_label()}",
                     f"Thời gian xử lý: {elapsed_s:.2f}s",
@@ -1385,9 +2005,17 @@ class OmniVoiceQtWindow(QMainWindow):
             self.design_progress.setValue(100)
             self.design_play_btn.setEnabled(True)
             self.design_save_btn.setEnabled(True)
+<<<<<<< HEAD
             self.design_info.setPlainText(
                 "\n".join([
                     "Thiết kế giọng thành công.",
+=======
+            self.design_generate_btn.setEnabled(True)
+            self.design_generate_btn.setText("✨ BẮT ĐẦU TẠO GIỌNG")
+            self.design_info.setPlainText(
+                "\n".join([
+                    "✅ Thiết kế giọng thành công.",
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                     "",
                     f"Thiết bị: {self._device_label()}",
                     f"Thời gian xử lý: {elapsed_s:.2f}s",
@@ -1402,6 +2030,7 @@ class OmniVoiceQtWindow(QMainWindow):
             )
         self._log_event(mode, "DONE", f"Hoàn tất sau {elapsed_s:.2f}s. Audio đầu ra {meta.get('output_seconds', 0.0):.2f}s.")
 
+<<<<<<< HEAD
     def _on_worker_error(self, mode: str, message: str, detail: str, worker_token: int | None = None):
         if worker_token is not None and worker_token != self._active_worker_token:
             return
@@ -1449,13 +2078,59 @@ class OmniVoiceQtWindow(QMainWindow):
         self._finished_workers.append(worker)
         worker.deleteLater()
         QTimer.singleShot(0, self._finished_workers.clear)
+=======
+    def _on_worker_error(self, mode: str, message: str, detail: str):
+        elapsed_s = self._elapsed_for_mode(mode)
+        if mode == "clone":
+            self.clone_status.setText(f"❌ Lỗi: {message}")
+            self.clone_progress.setValue(100)
+            self.clone_generate_btn.setEnabled(True)
+            self.clone_generate_btn.setText("✨ BẮT ĐẦU TẠO GIỌNG")
+            self.clone_info.setPlainText(
+                "\n".join([
+                    "❌ Clone giọng thất bại.",
+                    "",
+                    f"Thiết bị: {self._device_label()}",
+                    f"Thời gian trước khi lỗi: {elapsed_s:.2f}s",
+                    f"Lỗi chính: {message}",
+                    "",
+                    "Traceback chi tiết:",
+                    detail.strip(),
+                ])
+            )
+        else:
+            self.design_status.setText(f"❌ Lỗi: {message}")
+            self.design_progress.setValue(100)
+            self.design_generate_btn.setEnabled(True)
+            self.design_generate_btn.setText("✨ BẮT ĐẦU TẠO GIỌNG")
+            self.design_info.setPlainText(
+                "\n".join([
+                    "❌ Thiết kế giọng thất bại.",
+                    "",
+                    f"Thiết bị: {self._device_label()}",
+                    f"Thời gian trước khi lỗi: {elapsed_s:.2f}s",
+                    f"Lỗi chính: {message}",
+                    "",
+                    "Traceback chi tiết:",
+                    detail.strip(),
+                ])
+            )
+        self._log_event(mode, "ERROR", message)
+        for line in detail.strip().splitlines():
+            self._log_event(mode, "TRACE", line)
+        QMessageBox.critical(self, "Lỗi hệ thống", message)
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 
     def _build_runtime_summary(self, mode: str, payload: dict) -> str:
         config = payload["generation_config"]
         lines = [
             f"Mode: {'Clone giọng' if mode == 'clone' else 'Thiết kế giọng'}",
             f"Thiết bị: {self._device_label()}",
+<<<<<<< HEAD
             f"ASR: {'Báº­t' if getattr(self.model, '_asr_pipe', None) is not None else 'Táº¯t'}",
+=======
+            f"ASR: {'Bật' if getattr(self.model, '_asr_pipe', None) is not None else 'Tắt'}",
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
             f"Ngôn ngữ: {payload.get('language') or 'Tự động'}",
             f"Số ký tự đầu vào: {len(payload.get('text', ''))}",
             f"Inference steps: {config.num_step}",
@@ -1559,12 +2234,19 @@ class OmniVoiceQtWindow(QMainWindow):
             
         if line.startswith("[STEP_PROGRESS]"):
             try:
+<<<<<<< HEAD
                 if self._active_worker_token is None or not self.active_mode:
                     return
                 parts = line.split(" ")[1].split("/")
                 step = int(parts[0])
                 total = int(parts[1])
                 mode = self.active_mode
+=======
+                parts = line.split(" ")[1].split("/")
+                step = int(parts[0])
+                total = int(parts[1])
+                mode = "clone" if (self.worker and self.worker.mode == "clone") else "design"
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
                 pct = 45 + int((step / total) * 50)  # Progress between 45 and 95
                 self._update_progress(mode, f"Đang suy luận (bước {step}/{total})...", pct)
             except Exception:
@@ -1591,12 +2273,15 @@ def main():
 
     device = get_best_device()
     dtype = torch.float16 if device != "cpu" else torch.float32
+<<<<<<< HEAD
     
     # Háº¡n cháº¿ GPU cháº¡y 100% báº±ng cÃ¡ch giáº£m luá»“ng OMP vÃ  Torch Thread
     import os
     os.environ["OMP_NUM_THREADS"] = "1"
     torch.set_num_threads(1)
     
+=======
+>>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
     print(f"Dang nap model tren {device}...")
     model = OmniVoice.from_pretrained(args.model, asr_model_name=args.asr_model, device_map=device, dtype=dtype, load_asr=not args.no_asr)
     print("Nap model xong.")
