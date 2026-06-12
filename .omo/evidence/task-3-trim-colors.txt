@@ -1,0 +1,1 @@
+TrimRangeSelector uses QColor values, QMessageBox styled in style.qss

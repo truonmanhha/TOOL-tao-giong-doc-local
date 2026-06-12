@@ -1,0 +1,1 @@
+Added quick insert buttons for [laughter], [sigh], [surprise-ah] to clone/design editors

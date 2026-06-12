@@ -23,19 +23,14 @@ Provides:
 - ``add_punctuation()``: Appends missing end punctuation (Chinese or English).
 """
 
-<<<<<<< HEAD
 import re
 from typing import List, Optional
 
 from omnivoice.utils.vi_sensitive_terms import VI_PRONUNCIATION_SENSITIVE_TERMS
 
-=======
-from typing import List, Optional
 
->>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
-
-SPLIT_PUNCTUATION = set(".,;:!?。，；：！？")
-CLOSING_MARKS = set("\"'""'）]》》>」】")
+SPLIT_PUNCTUATION = set(".,;:!?ã€‚ï¼Œï¼›ï¼šï¼ï¼Ÿ")
+CLOSING_MARKS = set("\"'""'ï¼‰]ã€‹ã€‹>ã€ã€‘")
 
 END_PUNCTUATION = {
     ";",
@@ -44,7 +39,7 @@ END_PUNCTUATION = {
     ".",
     "!",
     "?",
-    "…",
+    "â€¦",
     ")",
     "]",
     "}",
@@ -52,16 +47,16 @@ END_PUNCTUATION = {
     "'",
     """,
     "'",
-    "；",
-    "：",
-    "，",
-    "。",
-    "！",
-    "？",
-    "、",
-    "……",
-    "）",
-    "】",
+    "ï¼›",
+    "ï¼š",
+    "ï¼Œ",
+    "ã€‚",
+    "ï¼",
+    "ï¼Ÿ",
+    "ã€",
+    "â€¦â€¦",
+    "ï¼‰",
+    "ã€‘",
     """,
     "'",
 }
@@ -124,7 +119,6 @@ ABBREVIATIONS = {
 }
 
 
-<<<<<<< HEAD
 _SENSITIVE_END_RE = re.compile(
     r"(?iu)(?:^|\s)(" + "|".join(
         sorted((re.escape(term) for term in VI_PRONUNCIATION_SENSITIVE_TERMS), key=len, reverse=True)
@@ -134,18 +128,18 @@ _SENSITIVE_END_RE = re.compile(
 
 VI_NONVERBAL_TAG_FALLBACKS = {
     "[laughter]": " haha ",
-    "[sigh]": " hầy... ",
-    "[confirmation-en]": " ừ ",
-    "[question-en]": " hả? ",
-    "[question-ah]": " á? ",
-    "[question-oh]": " ồ? ",
-    "[question-ei]": " ê? ",
-    "[question-yi]": " ý? ",
-    "[surprise-ah]": " á! ",
-    "[surprise-oh]": " ồ ",
-    "[surprise-wa]": " òa ",
-    "[surprise-yo]": " ôi ",
-    "[dissatisfaction-hnn]": " hừ ",
+    "[sigh]": " háº§y... ",
+    "[confirmation-en]": " á»« ",
+    "[question-en]": " háº£? ",
+    "[question-ah]": " Ã¡? ",
+    "[question-oh]": " á»“? ",
+    "[question-ei]": " Ãª? ",
+    "[question-yi]": " Ã½? ",
+    "[surprise-ah]": " Ã¡! ",
+    "[surprise-oh]": " á»“ ",
+    "[surprise-wa]": " Ã²a ",
+    "[surprise-yo]": " Ã´i ",
+    "[dissatisfaction-hnn]": " há»« ",
 }
 
 _SUPPORTED_NONVERBAL_TAGS_PATTERN = "|".join(
@@ -177,8 +171,6 @@ def collapse_adjacent_nonverbal_tags(text: str) -> str:
     return text
 
 
-=======
->>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
 def chunk_text_punctuation(
     text: str,
     chunk_len: int,
@@ -277,13 +269,13 @@ def add_punctuation(text: str):
     if text[-1] not in END_PUNCTUATION:
         is_chinese = any("\u4e00" <= char <= "\u9fff" for char in text)
 
-        text += "。" if is_chinese else "."
+        text += "ã€‚" if is_chinese else "."
 
     return text
 
 
 def normalize_vietnamese_numbers(text: str, is_vi: bool = True) -> str:
-    """Normalize Vietnamese decimals (e.g. 372,5 -> 372 phẩy 5) and thousands separators."""
+    """Normalize Vietnamese decimals (e.g. 372,5 -> 372 pháº©y 5) and thousands separators."""
     import re
     if not text:
         return text
@@ -291,19 +283,19 @@ def normalize_vietnamese_numbers(text: str, is_vi: bool = True) -> str:
     if not is_vi:
         return text
 
-    # 1. Decimal commas: e.g. 372,5 -> 372 phẩy 5
-    text = re.sub(r'\b(\d+),(\d+)\b', r'\1 phẩy \2', text)
+    # 1. Decimal commas: e.g. 372,5 -> 372 pháº©y 5
+    text = re.sub(r'\b(\d+),(\d+)\b', r'\1 pháº©y \2', text)
 
     # 2. Decimal dots vs thousands separators:
     # If fractional part after dot has exactly 3 digits (like 1.000 or 1.234), it's thousands separator -> remove it.
-    # Otherwise (like 372.5 or 1.2), it's a decimal dot -> replace with "phẩy".
+    # Otherwise (like 372.5 or 1.2), it's a decimal dot -> replace with "pháº©y".
     def replace_dot(match):
         whole = match.group(1)
         fraction = match.group(2)
         if len(fraction) == 3:
             return whole + fraction
         else:
-            return whole + " phẩy " + fraction
+            return whole + " pháº©y " + fraction
 
     text = re.sub(r'\b(\d+)\.(\d+)\b', replace_dot, text)
 
@@ -314,58 +306,57 @@ def normalize_vietnamese_numbers(text: str, is_vi: bool = True) -> str:
             break
         text = new_text
 
-<<<<<<< HEAD
     # 4. Convert plain numbers to words using num2words if available
     try:
         from num2words import num2words
         def number_to_vietnamese_words(match):
             num_str = match.group(0)
             try:
-                if " phẩy " in num_str:
-                    parts = num_str.split(" phẩy ")
+                if " pháº©y " in num_str:
+                    parts = num_str.split(" pháº©y ")
                     whole = num2words(int(parts[0]), lang='vi')
-                    # Tách từng số thập phân để đọc cho tự nhiên
+                    # TÃ¡ch tá»«ng sá»‘ tháº­p phÃ¢n Ä‘á»ƒ Ä‘á»c cho tá»± nhiÃªn
                     decimal_digits = " ".join([num2words(int(d), lang='vi') for d in parts[1]])
-                    return f"{whole} phẩy {decimal_digits}"
+                    return f"{whole} pháº©y {decimal_digits}"
                 else:
                     return num2words(int(num_str), lang='vi')
             except Exception:
                 return num_str
         
-        # Match standalone numbers or numbers with "phẩy"
-        text = re.sub(r'\b\d+(?: phẩy \d+)?\b', number_to_vietnamese_words, text)
+        # Match standalone numbers or numbers with "pháº©y"
+        text = re.sub(r'\b\d+(?: pháº©y \d+)?\b', number_to_vietnamese_words, text)
     except ImportError:
         pass # Fallback to original text if num2words is not installed
 
-    # 5. Thay thế ngày tháng năm
+    # 5. Thay tháº¿ ngÃ y thÃ¡ng nÄƒm
     def replace_date(match):
         day = match.group(1)
         month = match.group(2)
         year = match.group(3)
-        return f" ngày {day} tháng {month} năm {year} "
+        return f" ngÃ y {day} thÃ¡ng {month} nÄƒm {year} "
     
     text = re.sub(r'\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\b', replace_date, text)
 
-    # 6. Thay thế giờ phút
+    # 6. Thay tháº¿ giá» phÃºt
     def replace_time(match):
         hour = match.group(1)
         minute = match.group(2)
-        return f" {hour} giờ {minute} phút "
+        return f" {hour} giá» {minute} phÃºt "
     
     text = re.sub(r'\b(\d{1,2}):(\d{2})\b', replace_time, text)
 
-    # 7. Thay thế %
-    text = re.sub(r'(\d+)%', r'\1 phần trăm', text)
+    # 7. Thay tháº¿ %
+    text = re.sub(r'(\d+)%', r'\1 pháº§n trÄƒm', text)
     
-    # 8. Thay thế các đơn vị tiền tệ/đo lường cơ bản (để tránh bị đọc nuốt)
-    text = re.sub(r'\b(\d+)\s*k\b', r'\1 nghìn', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*tr\b', r'\1 triệu', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*đ\b', r'\1 đồng', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*vnd\b', r'\1 việt nam đồng', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*km\b', r'\1 ki lô mét', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*kg\b', r'\1 ki lô gam', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*m\b', r'\1 mét', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*cm\b', r'\1 xăng ti mét', text, flags=re.IGNORECASE)
+    # 8. Thay tháº¿ cÃ¡c Ä‘Æ¡n vá»‹ tiá»n tá»‡/Ä‘o lÆ°á»ng cÆ¡ báº£n (Ä‘á»ƒ trÃ¡nh bá»‹ Ä‘á»c nuá»‘t)
+    text = re.sub(r'\b(\d+)\s*k\b', r'\1 nghÃ¬n', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*tr\b', r'\1 triá»‡u', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*Ä‘\b', r'\1 Ä‘á»“ng', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*vnd\b', r'\1 viá»‡t nam Ä‘á»“ng', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*km\b', r'\1 ki lÃ´ mÃ©t', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*kg\b', r'\1 ki lÃ´ gam', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*m\b', r'\1 mÃ©t', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*cm\b', r'\1 xÄƒng ti mÃ©t', text, flags=re.IGNORECASE)
 
     return text.strip()
 
@@ -389,54 +380,23 @@ def map_vietnamese_emotions(text: str) -> str:
 
     # Laughter: haha, hahaha, hehe, hihi, hoho, ha ha, he he
     text = re.sub(r'\b(ha\s*){2,}\b', ' haha ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(he\s*){2,}\b', ' hé hé hé ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hi\s*){2,}\b', ' hí hí hí ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hô\s*){2,}\b', ' hố hố hố ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(ho\s*){2,}\b', ' hô hô hô ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(he\s*){2,}\b', ' hÃ© hÃ© hÃ© ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hi\s*){2,}\b', ' hÃ­ hÃ­ hÃ­ ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hÃ´\s*){2,}\b', ' há»‘ há»‘ há»‘ ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(ho\s*){2,}\b', ' hÃ´ hÃ´ hÃ´ ', text, flags=re.IGNORECASE)
 
-    # Sighs: haizz, thở dài
-    text = re.sub(r'\bhaiz+\b', ' hầy... ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bthở dài\b', ' hầy... ', text, flags=re.IGNORECASE)
+    # Sighs: haizz, thá»Ÿ dÃ i
+    text = re.sub(r'\bhaiz+\b', ' háº§y... ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bthá»Ÿ dÃ i\b', ' háº§y... ', text, flags=re.IGNORECASE)
 
-    # Dissatisfaction: hừm, hmm
-    text = re.sub(r'\bh[ưừ]m+\b', ' hừ ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bhm+\b', ' hừ ', text, flags=re.IGNORECASE)
+    # Dissatisfaction: há»«m, hmm
+    text = re.sub(r'\bh[Æ°á»«]m+\b', ' há»« ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bhm+\b', ' há»« ', text, flags=re.IGNORECASE)
 
     # Surprise cues without overriding existing question punctuation.
-    text = re.sub(r'\b[u]?[oò]à(?!!|\?)\b', ' òa ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bồ+(?!!|\?)\b', ' ồ ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bá+(?!!|\?)\b', ' á! ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b[u]?[oÃ²]Ã (?!!|\?)\b', ' Ã²a ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bá»“+(?!!|\?)\b', ' á»“ ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bÃ¡+(?!!|\?)\b', ' Ã¡! ', text, flags=re.IGNORECASE)
 
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
-=======
-    return text
-
-
-def map_vietnamese_emotions(text: str) -> str:
-    """Map common Vietnamese emotion words to OmniVoice non-verbal tags."""
-    import re
-    if not text:
-        return text
-    
-    # Laughter: haha, hahaha, hehe, hihi, hoho, ha ha, he he
-    text = re.sub(r'\b(ha\s*){2,}\b', 'há há há', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(he\s*){2,}\b', 'hé hé hé', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hi\s*){2,}\b', 'hí hí hí', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hô\s*){2,}\b', 'hố hố hố', text, flags=re.IGNORECASE)
-    
-    # Sighs: haizz, thở dài
-    text = re.sub(r'\bhaiz+\b', '[sigh]', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bthở dài\b', '[sigh]', text, flags=re.IGNORECASE)
-    
-    # Dissatisfaction: hừm, hmm
-    text = re.sub(r'\bh[ưừ]m+\b', '[dissatisfaction-hnn]', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bhm+\b', '[dissatisfaction-hnn]', text, flags=re.IGNORECASE)
-    
-    # Surprise: oà, uoà, ồ
-    text = re.sub(r'\b[u]?[oò]à\b', '[surprise-wa]', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bồ+\b', '[surprise-oh]', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bá+\b', '[surprise-ah]', text, flags=re.IGNORECASE)
-    
-    return text
->>>>>>> 5766eb7d6be95cb98d3fc2076e1f63567e773b2d
