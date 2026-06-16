@@ -15,9 +15,46 @@ echo         OMNIVOICE APP LOCAL - NATIVE DESKTOP
 echo ========================================================
 echo.
 
+:: --- PORTABLE UV: cache & python nam trong project (ko chay o C) ---
+set UV_EXE=%~dp0.uv\bin\uv.exe
+set UV_PYTHON_INSTALL_DIR=%~dp0.uv\python
+set UV_CACHE_DIR=%~dp0.uv\cache
+set UV_TOOL_DIR=%~dp0.uv\tools
+
+:: Tu dong tai uv neu chua co (tai ve .uv\bin)
+if not exist "%UV_EXE%" (
+    echo [*] Dang tai uv ve project ^(1 lan duy nhat^)...
+    if not exist "%~dp0.uv\bin" mkdir "%~dp0.uv\bin"
+    powershell -Command "& { irm https://astral.sh/uv/install.ps1 | iex }" >nul 2>&1
+    if exist "%USERPROFILE%\.local\bin\uv.exe" (
+        copy "%USERPROFILE%\.local\bin\uv.exe" "%UV_EXE%" >nul
+        copy "%USERPROFILE%\.local\bin\uvx.exe" "%~dp0.uv\bin\uvx.exe" >nul
+    )
+    if not exist "%UV_EXE%" (
+        echo [!] Khong the tai uv. Hay chay lai hoac tai thu cong.
+        pause
+        exit /b 1
+    )
+)
+
+:: Tao venv bang uv (tu dong download Python 3.10 ve .uv\python neu chua co)
 if not exist ".venv" (
-    echo [*] Dang tao moi truong ao Python...
-    python -m venv .venv
+    echo [*] Dang tai Python va tao moi truong ao...
+    "%UV_EXE%" venv --python 3.10 .venv
+    if errorlevel 1 (
+        echo [!] Tao venv that bai.
+        pause
+        exit /b 1
+    )
+) else if not exist ".venv\Scripts\python.exe" (
+    echo [*] .venv bi loi, dang tao lai...
+    rmdir /s /q ".venv"
+    "%UV_EXE%" venv --python 3.10 .venv
+    if errorlevel 1 (
+        echo [!] Tao venv that bai.
+        pause
+        exit /b 1
+    )
 )
 
 call .venv\Scripts\activate
@@ -35,9 +72,9 @@ set TORCH_HOME=%~dp0.cache\torch
 python -c "import PySide6, sounddevice, soundfile, imageio_ffmpeg, pydub, torch, qdarktheme" >nul 2>&1
 if errorlevel 1 (
     echo [*] Dang cai dat thu vien can thiet cho app native...
-    python -m pip install PySide6 sounddevice soundfile imageio-ffmpeg pydub huggingface_hub pyqtdarktheme
-    python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
-    python -m pip install -e .
+    "%UV_EXE%" pip install --python ".venv\Scripts\python.exe" PySide6 sounddevice soundfile imageio-ffmpeg pydub huggingface_hub pyqtdarktheme
+    "%UV_EXE%" pip install --python ".venv\Scripts\python.exe" torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+    "%UV_EXE%" pip install --python ".venv\Scripts\python.exe" -e .
 )
 
 if not exist "%~dp0models\OmniVoice\config.json" (

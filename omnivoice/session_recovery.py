@@ -15,11 +15,23 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def get_runtime_root() -> Path:
+    project_root = Path(__file__).resolve().parent.parent
+    runtime_root = project_root / ".omnivoice-runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    return runtime_root
+
+
+def get_temp_root() -> Path:
+    temp_root = get_runtime_root() / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    return temp_root
+
+
 def get_sessions_root() -> Path:
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        return Path(appdata) / "OmniVoiceLocal" / "sessions"
-    return Path.home() / ".omnivoice-local" / "sessions"
+    sessions_root = get_runtime_root() / "sessions"
+    sessions_root.mkdir(parents=True, exist_ok=True)
+    return sessions_root
 
 
 def _atomic_write_text(path: Path, content: str) -> None:

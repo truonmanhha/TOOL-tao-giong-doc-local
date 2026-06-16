@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -7,7 +8,15 @@ import logging
 import time
 import traceback
 import threading
+import re
+import difflib
 from pathlib import Path
+from collections import Counter
+
+try:
+    import winsound
+except Exception:
+    winsound = None
 
 import imageio_ffmpeg
 import numpy as np
@@ -16,7 +25,7 @@ import soundfile as sf
 import torch
 from pydub import AudioSegment
 from PySide6.QtCore import QPoint, Property, QRect, Qt, QThread, Signal, QTimer, QObject
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QSyntaxHighlighter, QTextCharFormat
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -39,13 +48,15 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QTabWidget,
+    QListWidget,
+    QListWidgetItem,
     QVBoxLayout,
     QWidget,
     QScrollArea,
 )
 
 from omnivoice import OmniVoice, OmniVoiceGenerationConfig
-from omnivoice.session_recovery import SessionManager
+from omnivoice.session_recovery import SessionManager, get_temp_root
 from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
 from omnivoice.utils.text import (
     chunk_text_punctuation,
@@ -53,6 +64,13 @@ from omnivoice.utils.text import (
     map_vietnamese_emotions,
     normalize_vietnamese_numbers,
 )
+from omnivoice.utils.vi_sensitive_terms import VI_PRONUNCIATION_SENSITIVE_TERMS
+
+try:
+    from wordfreq import zipf_frequency, top_n_list
+except Exception:
+    zipf_frequency = None
+    top_n_list = None
 
 
 _ALL_LANGUAGES = ["Tự động"] + sorted(lang_display_name(n) for n in LANG_NAMES)
@@ -125,6 +143,279 @@ _VI_TO_INSTRUCT = {
     "Tiếng Thanh Đảo": "青岛话",
     "Tiếng Đông Bắc": "东北话",
 }
+
+
+_GENERATION_PRESETS = {
+    "fast": {
+        "label": "Nhanh",
+        "summary": "Toc do uu tien. Hop voi script dai, test nhanh, batch lon.",
+        "steps": 12,
+        "guidance": 1.2,
+        "speed": 1.2,
+    },
+    "balanced": {
+        "label": "Can bang",
+        "summary": "De xuat cho workflow hang ngay. Nhanh hon ban cu nhung van on.",
+        "steps": 16,
+        "guidance": 1.5,
+        "speed": 1.15,
+    },
+    "quality": {
+        "label": "Chat luong",
+        "summary": "Chi tiet hon nhung cham hon. Dung khi can output ky.",
+        "steps": 32,
+        "guidance": 2.0,
+        "speed": 1.0,
+    },
+}
+
+
+_LOCAL_TEMP_ROOT = get_temp_root()
+
+
+def _named_temp_wav() -> tempfile.NamedTemporaryFile:
+    _LOCAL_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+    return tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".wav",
+        dir=str(_LOCAL_TEMP_ROOT),
+    )
+
+
+def parse_srt_blocks(srt_content: str) -> str:
+    lines = srt_content.splitlines()
+    blocks: list[str] = []
+    current_block: list[str] = []
+    is_text = False
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or re.fullmatch(r"\d+", line):
+            if current_block:
+                blocks.append(" ".join(current_block))
+                current_block = []
+            is_text = False
+            continue
+        if re.match(r"^\d{2}:\d{2}:\d{2}", line):
+            is_text = True
+            continue
+        if is_text:
+            current_block.append(line)
+
+    if current_block:
+        blocks.append(" ".join(current_block))
+    return "\n".join(blocks)
+
+
+def format_text_content(text: str) -> str:
+    return re.sub(r"\s{2,}", " ", text.replace("\r", " ").replace("\n", " ")).strip()
+
+
+def smart_sort_text_content(input_text: str) -> str:
+    vi_lower = "aàảãáạăằẳẵắặâầẩẫấậeèẻẽéẹêềểễếệiìỉĩíịoòỏõóọôồổỗốộơờởỡớợuùủũúụưừửữứựyỳỷỹýỵđ"
+    vi_upper = "AÀẢÃÁẠĂẰẲẴẮẶÂẦẨẪẤẬEÈẺẼÉẸÊỀỂỄẾỆIÌỈĨÍỊOÒỎÕÓỌÔỒỔỖỐỘƠỜỞỠỚỢUÙỦŨÚỤƯỪỬỮỨỰYỲỶỸÝỴĐ"
+    tag_noise = r"\[(âm nhạc|music|tiếng cười|tạp âm|noise|background music|applause|laughs?|laughter)\]"
+
+    text = re.sub(tag_noise, "", input_text, flags=re.IGNORECASE)
+    text = re.sub(fr"([{vi_upper}][{vi_lower}]+)\.\s+([{vi_upper}][{vi_lower}]+)", r"\1 \2", text)
+    text = re.sub(fr"([{vi_lower}a-z])\.\s+([{vi_lower}a-z])", r"\1 \2", text, flags=re.IGNORECASE)
+    unified_text = re.sub(r"\s+", " ", text.replace("\r", " ").replace("\n", " ")).strip()
+    if not unified_text:
+        return ""
+
+    sentence_break = re.compile(fr"(?<=[.!?])\s+(?=[{vi_upper}A-Z\"'])")
+    dialogue_break = re.compile(r'(".*?")')
+    simple_break = re.compile(r"(?<=[.!?])\s+")
+
+    sentences = sentence_break.split(unified_text)
+    final_lines: list[str] = []
+
+    for sentence in sentences:
+        parts = [part for part in dialogue_break.split(sentence) if part.strip()]
+        for part in parts:
+            trimmed = part.strip()
+            if trimmed.startswith('"') and trimmed.endswith('"'):
+                inner = trimmed[1:-1].strip()
+                inner_parts = [piece.strip() for piece in simple_break.split(inner) if piece.strip()]
+                if len(inner_parts) > 1:
+                    final_lines.extend([f'"{piece}"' for piece in inner_parts])
+                elif inner:
+                    final_lines.append(f'"{inner}"')
+            else:
+                final_lines.extend([piece.strip() for piece in simple_break.split(trimmed) if piece.strip()])
+
+    return "\n".join(line for line in final_lines if line)
+
+
+_SPELL_TOKEN_RE = re.compile(r"[A-Za-zÀ-ỹà-ỹĐđ]+", re.UNICODE)
+_SPELL_LEXICON_CACHE = None
+_SPELL_INDEX_CACHE = None
+
+
+def _build_spell_lexicon():
+    global _SPELL_LEXICON_CACHE, _SPELL_INDEX_CACHE
+    if _SPELL_LEXICON_CACHE is not None and _SPELL_INDEX_CACHE is not None:
+        return _SPELL_LEXICON_CACHE, _SPELL_INDEX_CACHE
+
+    lexicon: set[str] = set()
+    if top_n_list is not None:
+        try:
+            lexicon.update(word.lower() for word in top_n_list("vi", 50000))
+            lexicon.update(word.lower() for word in top_n_list("en", 12000))
+        except Exception:
+            pass
+
+    lexicon.update(word.lower() for word in VI_PRONUNCIATION_SENSITIVE_TERMS)
+    lexicon.update(
+        {
+            "tts", "srt", "txt", "wav", "mp3", "cuda", "asr", "cfg", "clone",
+            "design", "workflow", "preview", "format", "youtube", "omnivoice",
+            "local", "offline", "batch", "prompt", "prompts", "thumbnail",
+            "tiktok", "facebook", "zalo", "ok", "oke", "audio", "video",
+        }
+    )
+    lexicon = {word for word in lexicon if word and any(ch.isalpha() for ch in word)}
+
+    index: dict[str, list[str]] = {}
+    for word in lexicon:
+        index.setdefault(word[:1], []).append(word)
+
+    _SPELL_LEXICON_CACHE = lexicon
+    _SPELL_INDEX_CACHE = index
+    return _SPELL_LEXICON_CACHE, _SPELL_INDEX_CACHE
+
+
+def _match_case_style(source: str, suggestion: str) -> str:
+    if source.isupper():
+        return suggestion.upper()
+    if len(source) > 1 and source[0].isupper() and source[1:].islower():
+        return suggestion[:1].upper() + suggestion[1:]
+    return suggestion
+
+
+class SpellcheckHighlighter(QSyntaxHighlighter):
+    def __init__(self, document):
+        super().__init__(document)
+        self._enabled = zipf_frequency is not None
+        self._lexicon, self._index = _build_spell_lexicon()
+        self._format = QTextCharFormat()
+        self._format.setUnderlineStyle(QTextCharFormat.WaveUnderline)
+        self._format.setUnderlineColor(QColor("#ff6b6b"))
+        self._format.setBackground(QColor(255, 107, 107, 38))
+        self._format.setForeground(QColor("#ffd7d7"))
+        self._suggestion_cache: dict[str, list[str]] = {}
+
+    def highlightBlock(self, text: str):
+        if not self._enabled or not text.strip():
+            return
+        for match in _SPELL_TOKEN_RE.finditer(text):
+            token = match.group(0)
+            if self._is_suspicious(token):
+                self.setFormat(match.start(), len(token), self._format)
+
+    def _is_suspicious(self, token: str) -> bool:
+        normalized = token.strip().lower()
+        if not normalized or len(normalized) <= 1:
+            return False
+        if normalized in self._lexicon:
+            return False
+        if token.isupper() and len(token) <= 5:
+            return False
+        if normalized.startswith(("http", "www")):
+            return False
+        if "-" in normalized or "_" in normalized:
+            return False
+        if not any(ch.isalpha() for ch in normalized):
+            return False
+
+        vi_score = zipf_frequency(normalized, "vi") if zipf_frequency else 0.0
+        en_score = zipf_frequency(normalized, "en") if zipf_frequency else 0.0
+        if vi_score >= 2.2 or en_score >= 2.7:
+            return False
+        if len(normalized) <= 2 and max(vi_score, en_score) >= 1.6:
+            return False
+        return True
+
+    def suggestions_for(self, token: str, limit: int = 5) -> list[str]:
+        normalized = token.strip().lower()
+        if not normalized or not self._is_suspicious(token):
+            return []
+        cached = self._suggestion_cache.get(normalized)
+        if cached is not None:
+            return cached[:limit]
+
+        first_bucket = list(self._index.get(normalized[:1], []))
+        candidates = [word for word in first_bucket if abs(len(word) - len(normalized)) <= 3]
+        if len(candidates) < 12:
+            fallback = [word for word in self._lexicon if abs(len(word) - len(normalized)) <= 2]
+            candidates.extend(fallback)
+
+        deduped = list(dict.fromkeys(candidates))
+        matches = difflib.get_close_matches(normalized, deduped, n=max(limit * 3, 12), cutoff=0.72)
+        ranked = sorted(
+            matches,
+            key=lambda word: max(zipf_frequency(word, "vi"), zipf_frequency(word, "en")),
+            reverse=True,
+        )
+        self._suggestion_cache[normalized] = ranked[:limit]
+        return self._suggestion_cache[normalized]
+
+    def suspicious_words_in_text(self, text: str) -> list[str]:
+        if not self._enabled or not text.strip():
+            return []
+        words: list[str] = []
+        for match in _SPELL_TOKEN_RE.finditer(text):
+            token = match.group(0)
+            if self._is_suspicious(token):
+                words.append(token)
+        return words
+
+
+class SpellcheckTextEdit(QPlainTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._spellcheck_highlighter: SpellcheckHighlighter | None = None
+
+    def set_spellcheck_highlighter(self, highlighter: SpellcheckHighlighter):
+        self._spellcheck_highlighter = highlighter
+
+    def contextMenuEvent(self, event):
+        menu = self.createStandardContextMenu()
+        cursor = self.cursorForPosition(event.pos())
+        cursor.select(cursor.WordUnderCursor)
+        selected = cursor.selectedText().strip()
+
+        if self._spellcheck_highlighter and selected:
+            suggestions = self._spellcheck_highlighter.suggestions_for(selected)
+            if suggestions:
+                menu.addSeparator()
+                title_action = menu.addAction("Goi y sua")
+                title_action.setEnabled(False)
+                for suggestion in suggestions:
+                    action = menu.addAction(f'Thay tat ca "{selected}" -> "{suggestion}"')
+                    action.triggered.connect(
+                        lambda _=False, old_word=selected, new_word=suggestion: self.replace_all_occurrences(
+                            old_word,
+                            new_word,
+                        )
+                    )
+
+        menu.exec(event.globalPos())
+
+    def replace_all_occurrences(self, source_word: str, target_word: str):
+        if not source_word or not target_word or source_word == target_word:
+            return
+        text = self.toPlainText()
+        pattern = re.compile(
+            fr"(?<![A-Za-zÀ-ỹà-ỹĐđ]){re.escape(source_word)}(?![A-Za-zÀ-ỹà-ỹĐđ])",
+            flags=re.IGNORECASE,
+        )
+        replaced = pattern.sub(
+            lambda match: _match_case_style(match.group(0), target_word),
+            text,
+        )
+        if replaced != text:
+            self.setPlainText(replaced)
 
 
 def get_best_device():
@@ -285,16 +576,13 @@ class GenerationWorker(QThread):
     def _soft_throttle_cuda(self, chunk_elapsed_s: float) -> None:
         if not self._is_cuda_run():
             return
-        base_cooldown_s = 0.08
-        extra_cooldown_s = 0.12 if chunk_elapsed_s >= 8.0 else 0.0
-        try:
-            torch.cuda.synchronize()
-        except Exception:
-            pass
-        try:
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
+        base_cooldown_s = 0.02
+        extra_cooldown_s = 0.04 if chunk_elapsed_s >= 10.0 else 0.0
+        if chunk_elapsed_s >= 10.0:
+            try:
+                torch.cuda.synchronize()
+            except Exception:
+                pass
         time.sleep(base_cooldown_s + extra_cooldown_s)
 
     def cancel(self):
@@ -499,16 +787,23 @@ class GenerationWorker(QThread):
             self._raise_if_cancelled()
             if session_id and self.session_manager:
                 final_audio_path = self.session_manager.final_output_path(session_id)
-                temp_final = final_audio_path.with_suffix(final_audio_path.suffix + ".tmp")
-                sf.write(str(temp_final), final_audio, self.model.sampling_rate, format="WAV")
-                os.replace(temp_final, final_audio_path)
+            else:
+                temp_file = _named_temp_wav()
+                temp_file.close()
+                final_audio_path = Path(temp_file.name)
+            temp_final = final_audio_path.with_suffix(final_audio_path.suffix + ".tmp")
+            sf.write(str(temp_final), final_audio, self.model.sampling_rate, format="WAV")
+            os.replace(temp_final, final_audio_path)
+            meta["final_audio_file"] = str(final_audio_path)
+            if session_id and self.session_manager:
                 self.session_manager.mark_finished(
                     session_id,
                     "completed",
                     elapsed_s,
                     final_audio=str(final_audio_path),
                 )
-            self.success.emit(final_audio, meta)
+            del final_audio
+            self.success.emit(None, meta)
         except Exception as exc:
             self.error.emit(str(exc), traceback.format_exc())
 
@@ -530,6 +825,12 @@ class OmniVoiceQtWindow(QMainWindow):
         self.model = model
         self.sampling_rate = model.sampling_rate
         self.audio_output = None
+        self.current_output_path = None
+        self.current_output_session_id = None
+        self.result_player = QMediaPlayer(self)
+        self.result_audio = QAudioOutput(self)
+        self.result_player.setAudioOutput(self.result_audio)
+        self.result_player.playbackStateChanged.connect(self._on_result_playback_state_changed)
         
         # Log redirection
         self.log_stream = QtLogStream()
@@ -678,6 +979,12 @@ class OmniVoiceQtWindow(QMainWindow):
         design_scroll.setWidget(self._build_design_page())
         self.tabs.addTab(design_scroll, "Thiết Kế Giọng (Tạo giọng mới)")
 
+        text_tools_scroll = QScrollArea()
+        text_tools_scroll.setWidgetResizable(True)
+        text_tools_scroll.setFrameShape(QFrame.NoFrame)
+        text_tools_scroll.setWidget(self._build_text_tools_page())
+        self.tabs.addTab(text_tools_scroll, "Chu\u1ea9n B\u1ecb V\u0103n B\u1ea3n")
+
         recovery_scroll = QScrollArea()
         recovery_scroll.setWidgetResizable(True)
         recovery_scroll.setFrameShape(QFrame.NoFrame)
@@ -704,6 +1011,269 @@ class OmniVoiceQtWindow(QMainWindow):
         badge = QLabel(text)
         badge.setObjectName("PanelBadge")
         return badge
+
+    def _attach_spellcheck(self, editor: QPlainTextEdit):
+        if not hasattr(self, "_spellcheckers"):
+            self._spellcheckers = []
+        highlighter = SpellcheckHighlighter(editor.document())
+        if isinstance(editor, SpellcheckTextEdit):
+            editor.set_spellcheck_highlighter(highlighter)
+        self._spellcheckers.append(highlighter)
+        return highlighter
+
+    def _build_text_tools_page(self):
+        page = QWidget()
+        layout = QHBoxLayout(page)
+        layout.setAlignment(Qt.AlignTop)
+
+        left = self._card()
+        left_l = QVBoxLayout(left)
+        left_l.addWidget(self._build_runtime_strip("Text", "Nhap, upload, sap xep SRT va format truoc khi dua sang clone hoac design."))
+        left_l.addWidget(self._panel_badge("B\u01b0\u1edbc 1 \u00b7 N\u1ea1p n\u1ed9i dung"), alignment=Qt.AlignLeft)
+        left_l.addWidget(self._label("Ngu\u1ed3n v\u0103n b\u1ea3n", "SectionTitle"))
+
+        upload_row = QHBoxLayout()
+        self.text_tools_file = QLineEdit()
+        self.text_tools_file.setReadOnly(True)
+        self.text_tools_file.setObjectName("SoftField")
+        self.text_tools_file.setPlaceholderText("Ch\u01b0a ch\u1ecdn file TXT ho\u1eb7c SRT...")
+        upload_btn = QPushButton("Upload TXT/SRT")
+        upload_btn.clicked.connect(self._upload_text_tool_file)
+        upload_row.addWidget(self.text_tools_file, 1)
+        upload_row.addWidget(upload_btn)
+        left_l.addLayout(upload_row)
+
+        self.text_tools_editor = SpellcheckTextEdit()
+        self.text_tools_editor.setPlaceholderText("D\u00e1n n\u1ed9i dung ho\u1eb7c upload file v\u00e0o \u0111\u00e2y...")
+        self.text_tools_editor.setMinimumHeight(380)
+        self.text_tools_editor.textChanged.connect(self._refresh_text_tools_stats)
+        self._attach_spellcheck(self.text_tools_editor)
+        left_l.addWidget(self.text_tools_editor, 1)
+
+        stats_row = QHBoxLayout()
+        self.text_tools_stats = QLabel("")
+        self.text_tools_stats.setObjectName("SubTitle")
+        stats_row.addWidget(self.text_tools_stats)
+        stats_row.addStretch(1)
+        left_l.addLayout(stats_row)
+
+        tool_row = QHBoxLayout()
+        smart_btn = QPushButton("S\u1eafp x\u1ebfp th\u00f4ng minh")
+        smart_btn.clicked.connect(self._smart_sort_text_tools)
+        format_btn = QPushButton("Format text")
+        format_btn.clicked.connect(self._format_text_tools)
+        clear_btn = QPushButton("X\u00f3a h\u1ebft")
+        clear_btn.clicked.connect(lambda: self.text_tools_editor.setPlainText(""))
+        tool_row.addWidget(smart_btn)
+        tool_row.addWidget(format_btn)
+        tool_row.addWidget(clear_btn)
+        tool_row.addStretch(1)
+        left_l.addLayout(tool_row)
+
+        right = self._card()
+        right_l = QVBoxLayout(right)
+        right_l.addWidget(self._build_runtime_strip("Flow", "Sau khi xu ly xong, bam 1 nut de day text sang Clone hoac Design."))
+        right_l.addWidget(self._panel_badge("B\u01b0\u1edbc 2 \u00b7 \u0110\u1ea9y sang workflow"), alignment=Qt.AlignLeft)
+        right_l.addWidget(self._label("S\u1eed d\u1ee5ng nhanh", "SectionTitle"))
+
+        help_text = QPlainTextEdit()
+        help_text.setReadOnly(True)
+        help_text.setObjectName("SummaryBox")
+        help_text.setPlainText(
+            "\n".join(
+                [
+                    "Upload File:",
+                    "- N\u1ea1p nhanh file .txt ho\u1eb7c .srt.",
+                    "",
+                    "S\u1eafp x\u1ebfp th\u00f4ng minh:",
+                    "- Parse SRT thanh noi dung sach.",
+                    "- Gom lai va tach theo cau de de lam TTS hon.",
+                    "",
+                    "Format text:",
+                    "- Xoa xuong dong rac.",
+                    "- Rut gon khoang trang du thua.",
+                    "",
+                    "\u0110\u1ea9y sang Clone / Design:",
+                    "- Copy thang noi dung da xu ly sang tab tuong ung.",
+                ]
+            )
+        )
+        right_l.addWidget(help_text)
+
+        right_l.addWidget(self._label("Từ nghi sai trong đoạn", "SectionTitle"))
+        self.text_tools_spelling_list = QListWidget()
+        self.text_tools_spelling_list.setObjectName("SpellingList")
+        self.text_tools_spelling_list.setMinimumHeight(170)
+        self.text_tools_spelling_list.currentItemChanged.connect(self._on_text_tools_spelling_selected)
+        right_l.addWidget(self.text_tools_spelling_list)
+
+        suggestion_row = QHBoxLayout()
+        suggestion_row.setSpacing(8)
+        self.text_tools_replace_buttons = []
+        for idx in range(3):
+            btn = QPushButton(f"Gợi ý {idx + 1}")
+            btn.setEnabled(False)
+            btn.clicked.connect(lambda _=False, suggestion_index=idx: self._apply_text_tools_suggestion(suggestion_index))
+            self.text_tools_replace_buttons.append(btn)
+            suggestion_row.addWidget(btn)
+        right_l.addLayout(suggestion_row)
+
+        action_clone = QPushButton("D\u00f9ng cho Clone gi\u1ecdng")
+        action_clone.setProperty("variant", "primary")
+        action_clone.clicked.connect(lambda: self._push_text_tools_to_target("clone"))
+        action_design = QPushButton("D\u00f9ng cho Thi\u1ebft k\u1ebf gi\u1ecdng")
+        action_design.clicked.connect(lambda: self._push_text_tools_to_target("design"))
+        preview_btn = QPushButton("Xem sau format")
+        preview_btn.clicked.connect(self._preview_text_tools_result)
+        right_l.addWidget(action_clone)
+        right_l.addWidget(action_design)
+        right_l.addWidget(preview_btn)
+        right_l.addStretch(1)
+
+        layout.addWidget(left, 7)
+        layout.addWidget(right, 4)
+        QTimer.singleShot(0, self._refresh_text_tools_stats)
+        return page
+
+    def _refresh_text_tools_stats(self):
+        if not hasattr(self, "text_tools_editor") or not hasattr(self, "text_tools_stats"):
+            return
+        text = self.text_tools_editor.toPlainText()
+        words = len([word for word in re.split(r"\s+", text.strip()) if word])
+        chars = len(text)
+        lines = len([line for line in text.splitlines() if line.strip()]) if text.strip() else 0
+        self.text_tools_stats.setText(f"{words} t\u1eeb | {chars} k\u00fd t\u1ef1 | {lines} d\u00f2ng")
+        self._refresh_text_tools_spelling_list()
+
+    def _refresh_text_tools_spelling_list(self):
+        if not hasattr(self, "text_tools_editor") or not hasattr(self, "text_tools_spelling_list"):
+            return
+        editor = self.text_tools_editor
+        highlighter = getattr(editor, "_spellcheck_highlighter", None)
+        self._text_tools_spelling_entries = []
+        if highlighter is None:
+            self.text_tools_spelling_list.clear()
+            self.text_tools_spelling_list.addItem("Chưa có bộ kiểm lỗi.")
+            self._update_text_tools_suggestion_buttons([])
+            return
+
+        text = editor.toPlainText()
+        suspicious_words = highlighter.suspicious_words_in_text(text)
+        if not suspicious_words:
+            self.text_tools_spelling_list.clear()
+            self.text_tools_spelling_list.addItem("Không thấy từ nghi sai.")
+            self._update_text_tools_suggestion_buttons([])
+            return
+
+        counts = Counter(word.lower() for word in suspicious_words)
+        casing_map: dict[str, str] = {}
+        for word in suspicious_words:
+            casing_map.setdefault(word.lower(), word)
+
+        self.text_tools_spelling_list.clear()
+        for normalized, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+            display = casing_map.get(normalized, normalized)
+            suggestions = highlighter.suggestions_for(display, limit=3)
+            suggestion_text = f" -> {', '.join(suggestions)}" if suggestions else ""
+            times_label = "lần" if count > 1 else "lần"
+            item = QListWidgetItem(f"{display} ({count} {times_label}){suggestion_text}")
+            item.setData(Qt.UserRole, {"word": display, "suggestions": suggestions})
+            self.text_tools_spelling_list.addItem(item)
+            self._text_tools_spelling_entries.append({"word": display, "suggestions": suggestions})
+
+        self._update_text_tools_suggestion_buttons([])
+
+    def _on_text_tools_spelling_selected(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None):
+        if current is None:
+            self._update_text_tools_suggestion_buttons([])
+            return
+        payload = current.data(Qt.UserRole) or {}
+        suggestions = payload.get("suggestions") or []
+        self._update_text_tools_suggestion_buttons(suggestions)
+
+    def _update_text_tools_suggestion_buttons(self, suggestions: list[str]):
+        if not hasattr(self, "text_tools_replace_buttons"):
+            return
+        self._text_tools_active_suggestions = suggestions
+        for idx, btn in enumerate(self.text_tools_replace_buttons):
+            if idx < len(suggestions):
+                btn.setEnabled(True)
+                btn.setText(f"Sửa toàn bộ: {suggestions[idx]}")
+            else:
+                btn.setEnabled(False)
+                btn.setText(f"Gợi ý {idx + 1}")
+
+    def _apply_text_tools_suggestion(self, suggestion_index: int):
+        if not hasattr(self, "text_tools_spelling_list"):
+            return
+        current = self.text_tools_spelling_list.currentItem()
+        if current is None:
+            return
+        payload = current.data(Qt.UserRole) or {}
+        source_word = payload.get("word")
+        suggestions = payload.get("suggestions") or []
+        if not source_word or suggestion_index >= len(suggestions):
+            return
+        self.text_tools_editor.replace_all_occurrences(source_word, suggestions[suggestion_index])
+
+    def _upload_text_tool_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Ch\u1ecdn file v\u0103n b\u1ea3n", "", "Text (*.txt *.srt);;All Files (*.*)")
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                content = f.read()
+        except Exception as exc:
+            QMessageBox.critical(self, "L\u1ed7i \u0111\u1ecdc file", str(exc))
+            return
+
+        if path.lower().endswith(".srt"):
+            content = parse_srt_blocks(content)
+
+        self.text_tools_file.setText(path)
+        self.text_tools_editor.setPlainText(content)
+        self._refresh_text_tools_stats()
+
+    def _smart_sort_text_tools(self):
+        text = self.text_tools_editor.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Ch\u01b0a c\u00f3 n\u1ed9i dung", "H\u00e3y nh\u1eadp ho\u1eb7c upload v\u0103n b\u1ea3n tr\u01b0\u1edbc.")
+            return
+        self.text_tools_editor.setPlainText(smart_sort_text_content(text))
+        self._refresh_text_tools_stats()
+
+    def _format_text_tools(self):
+        text = self.text_tools_editor.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Ch\u01b0a c\u00f3 n\u1ed9i dung", "H\u00e3y nh\u1eadp ho\u1eb7c upload v\u0103n b\u1ea3n tr\u01b0\u1edbc.")
+            return
+        self.text_tools_editor.setPlainText(format_text_content(text))
+        self._refresh_text_tools_stats()
+
+    def _preview_text_tools_result(self):
+        text = self.text_tools_editor.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Ch\u01b0a c\u00f3 n\u1ed9i dung", "H\u00e3y nh\u1eadp ho\u1eb7c upload v\u0103n b\u1ea3n tr\u01b0\u1edbc.")
+            return
+        formatted = format_text_content(text)
+        QMessageBox.information(self, "Preview format", f"Text g\u1ed1c:\n{text}\n\n--- Sau format ---\n{formatted}")
+
+    def _push_text_tools_to_target(self, target: str):
+        text = self.text_tools_editor.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Ch\u01b0a c\u00f3 n\u1ed9i dung", "Kh\u00f4ng c\u00f3 v\u0103n b\u1ea3n \u0111\u1ec3 chuy\u1ec3n.")
+            return
+        if target == "clone":
+            self.clone_text.setPlainText(text)
+            self.tabs.setCurrentIndex(0)
+            self.clone_text.setFocus()
+        else:
+            self.design_text.setPlainText(text)
+            self.tabs.setCurrentIndex(1)
+            self.design_text.setFocus()
 
     def _insert_nonverbal_tag(self, editor: QPlainTextEdit, tag: str):
         cursor = editor.textCursor()
@@ -751,15 +1321,16 @@ class OmniVoiceQtWindow(QMainWindow):
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
         top_row.addWidget(self._label("Chèn nhanh:", "SubTitle"))
-        for label, tag in [
-            ("Cười", "[laughter]"),
-            ("Thở dài", "[sigh]"),
-            ("Xác nhận", "[confirmation-en]"),
-            ("Bực nhẹ", "[dissatisfaction-hnn]"),
+        for label, tag, preview_tag in [
+            ("Cười", "hahaha", "[laughter]"),
+            ("Thở dài", "[sigh]", "[sigh]"),
+            ("Xác nhận", "[confirmation-en]", "[confirmation-en]"),
+            ("Bực nhẹ", "[dissatisfaction-hnn]", "[dissatisfaction-hnn]"),
         ]:
             btn = QPushButton(label)
             btn.setMinimumHeight(32)
             btn.clicked.connect(lambda _=False, e=editor, t=tag: self._insert_nonverbal_tag(e, t))
+            btn.setToolTip(self._build_normalized_preview(preview_tag, "Vietnamese"))
             top_row.addWidget(btn)
         preview_btn = QPushButton("Xem preview")
         preview_btn.setMinimumHeight(32)
@@ -774,17 +1345,18 @@ class OmniVoiceQtWindow(QMainWindow):
 
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(8)
-        for label, tag in [
-            ("Hỏi EN", "[question-en]"),
-            ("Hỏi ah", "[question-ah]"),
-            ("Hỏi oh", "[question-oh]"),
-            ("Ngạc nhiên ah", "[surprise-ah]"),
-            ("Ngạc nhiên oh", "[surprise-oh]"),
-            ("Ngạc nhiên wa", "[surprise-wa]"),
+        for label, tag, preview_tag in [
+            ("Hỏi EN", "[question-en]", "[question-en]"),
+            ("Hỏi ah", "[question-ah]", "[question-ah]"),
+            ("Hỏi oh", "[question-oh]", "[question-oh]"),
+            ("Ngạc nhiên ah", "[surprise-ah]", "[surprise-ah]"),
+            ("Ngạc nhiên oh", "[surprise-oh]", "[surprise-oh]"),
+            ("Ngạc nhiên wa", "[surprise-wa]", "[surprise-wa]"),
         ]:
             btn = QPushButton(label)
             btn.setMinimumHeight(32)
             btn.clicked.connect(lambda _=False, e=editor, t=tag: self._insert_nonverbal_tag(e, t))
+            btn.setToolTip(self._build_normalized_preview(preview_tag, "Vietnamese"))
             bottom_row.addWidget(btn)
         bottom_row.addStretch(1)
 
@@ -792,17 +1364,73 @@ class OmniVoiceQtWindow(QMainWindow):
         wrapper.addLayout(bottom_row)
         return wrapper
 
+    def _apply_generation_preset(self, prefix: str, preset_key: str):
+        preset = _GENERATION_PRESETS.get(preset_key)
+        if not preset:
+            return
+        getattr(self, f"{prefix}_num_step").setValue(preset["steps"])
+        getattr(self, f"{prefix}_guidance").setValue(preset["guidance"])
+        getattr(self, f"{prefix}_speed").setValue(preset["speed"])
+        hint = getattr(self, f"{prefix}_preset_hint", None)
+        if hint is not None:
+            hint.setText(preset["summary"])
+
+    def _build_quick_preset_row(self, prefix: str):
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        row.addWidget(self._label("Preset nhanh", "SubTitle"))
+
+        preset_combo = QComboBox()
+        preset_combo.addItem("Nhanh", "fast")
+        preset_combo.addItem("Can bang", "balanced")
+        preset_combo.addItem("Chat luong", "quality")
+        preset_combo.setCurrentIndex(1)
+        preset_combo.currentIndexChanged.connect(
+            lambda _=0, p=prefix, combo=preset_combo: self._apply_generation_preset(
+                p,
+                combo.currentData(),
+            )
+        )
+        setattr(self, f"{prefix}_preset_combo", preset_combo)
+        row.addWidget(preset_combo, 0)
+
+        hint = QLabel("")
+        hint.setWordWrap(True)
+        hint.setObjectName("PresetHint")
+        setattr(self, f"{prefix}_preset_hint", hint)
+        row.addWidget(hint, 1)
+
+        return row
+
+    def _build_runtime_strip(self, mode_label: str, note: str):
+        frame = QFrame()
+        frame.setObjectName("InfoStrip")
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(14)
+
+        mode_chip = QLabel(mode_label)
+        mode_chip.setObjectName("StripChip")
+        layout.addWidget(mode_chip, 0, Qt.AlignTop)
+
+        note_label = QLabel(note)
+        note_label.setWordWrap(True)
+        note_label.setObjectName("StripNote")
+        layout.addWidget(note_label, 1)
+        return frame
+
     def _build_settings_group(self, prefix: str):
         settings_card = self._card()
         settings_l = QVBoxLayout(settings_card)
         # settings_l.setContentsMargins(24, 24, 24, 24)
         # settings_l.setSpacing(14)
+        settings_l.addLayout(self._build_quick_preset_row(prefix))
         settings_l.addWidget(self._label("Cài đặt nâng cao", "SectionTitle"))
         
         speed = QDoubleSpinBox()
         speed.setRange(0.5, 2.0)
         speed.setSingleStep(0.05)
-        speed.setValue(1.0)
+        speed.setValue(1.15)
         
         duration = QDoubleSpinBox()
         duration.setRange(0.0, 9999.0)
@@ -811,12 +1439,12 @@ class OmniVoiceQtWindow(QMainWindow):
 
         num_step = QSpinBox()
         num_step.setRange(4, 64)
-        num_step.setValue(32)
+        num_step.setValue(16)
 
         guidance = QDoubleSpinBox()
         guidance.setRange(0.0, 8.0)
         guidance.setSingleStep(0.1)
-        guidance.setValue(2.0)
+        guidance.setValue(1.5)
 
         denoise = QCheckBox("Khử ồn")
         denoise.setChecked(True)
@@ -853,6 +1481,7 @@ class OmniVoiceQtWindow(QMainWindow):
         row3.addWidget(postprocess)
         row3.addStretch(1)
         settings_l.addLayout(row3)
+        QTimer.singleShot(0, lambda p=prefix: self._apply_generation_preset(p, "balanced"))
         return settings_card
 
     def _build_clone_page(self):
@@ -869,12 +1498,14 @@ class OmniVoiceQtWindow(QMainWindow):
         c1_l = QVBoxLayout(c1)
         # c1_l.setContentsMargins(24, 24, 24, 24)
         # c1_l.setSpacing(12)
+        c1_l.addWidget(self._build_runtime_strip("Clone", "Toi uu cho script YouTube dai. Preset Can bang se nhanh hon ban cu ro ret."))
         c1_l.addWidget(self._panel_badge("Bước 1 · Nhập nội dung"), alignment=Qt.AlignLeft)
         c1_l.addWidget(self._label("Nội dung cần đọc", "SectionTitle"))
-        self.clone_text = QPlainTextEdit()
+        self.clone_text = SpellcheckTextEdit()
         self.clone_text.setPlaceholderText("Nhập văn bản bạn muốn chuyển thành giọng nói vào đây...\nVí dụ: Xin chào mọi người, hôm nay thời tiết rất đẹp!")
         self.clone_text.setMinimumHeight(150)
         self.clone_text.setMaximumHeight(220)
+        self._attach_spellcheck(self.clone_text)
         c1_l.addWidget(self.clone_text)
         c1_l.addLayout(self._nonverbal_bar(self.clone_text, lambda: None if self.clone_lang.currentText() == "Tự động" else self.clone_lang.currentText()))
         left_col.addWidget(c1)
@@ -890,6 +1521,7 @@ class OmniVoiceQtWindow(QMainWindow):
         file_row = QHBoxLayout()
         self.clone_file = QLineEdit()
         self.clone_file.setReadOnly(True)
+        self.clone_file.setObjectName("SoftField")
         self.clone_file.setPlaceholderText("Chưa chọn file audio/video nào...")
         browse_btn = QPushButton("Chọn File")
         browse_btn.setMinimumHeight(40)
@@ -912,6 +1544,8 @@ class OmniVoiceQtWindow(QMainWindow):
         trim_row = QHBoxLayout()
         self.preview_play_btn = QPushButton("Phát đoạn đã cắt")
         self.preview_play_btn.clicked.connect(self._toggle_media_preview)
+        self.cut_real_btn = QPushButton("Cắt thật")
+        self.cut_real_btn.clicked.connect(self._cut_reference_audio_real)
         
         self.trim_start = QDoubleSpinBox()
         self.trim_start.setRange(0.0, 99999.0)
@@ -923,6 +1557,7 @@ class OmniVoiceQtWindow(QMainWindow):
         self.trim_end.valueChanged.connect(self._sync_range_from_spin)
         
         trim_row.addWidget(self.preview_play_btn)
+        trim_row.addWidget(self.cut_real_btn)
         trim_row.addStretch(1)
         trim_row.addWidget(QLabel("Từ (s):"))
         trim_row.addWidget(self.trim_start)
@@ -932,10 +1567,11 @@ class OmniVoiceQtWindow(QMainWindow):
 
         c2_l.addSpacing(10)
         c2_l.addWidget(self._label("Lời của đoạn ghi âm mẫu (Tùy chọn, để trống AI sẽ tự nghe):", "SubTitle"))
-        self.clone_ref_text = QPlainTextEdit()
+        self.clone_ref_text = SpellcheckTextEdit()
         self.clone_ref_text.setPlaceholderText("Nhập lời thoại của đoạn âm thanh trên (nếu máy yếu tắt ASR).")
         self.clone_ref_text.setMinimumHeight(74)
         self.clone_ref_text.setMaximumHeight(90)
+        self._attach_spellcheck(self.clone_ref_text)
         c2_l.addWidget(self.clone_ref_text)
         left_col.addWidget(c2)
 
@@ -943,6 +1579,7 @@ class OmniVoiceQtWindow(QMainWindow):
         c3_l = QVBoxLayout(c3)
         # c3_l.setContentsMargins(24, 24, 24, 24)
         # c3_l.setSpacing(10)
+        c3_l.addWidget(self._build_runtime_strip("Language", "Auto van on, nhung khi biet ro ngon ngu thi chon thang de ket qua deu hon."))
         c3_l.addWidget(self._panel_badge("Bước 3 · Ngôn ngữ"), alignment=Qt.AlignLeft)
         c3_l.addWidget(self._label("Ngôn ngữ đích & Tùy chỉnh", "SectionTitle"))
         self.clone_lang = QComboBox()
@@ -962,6 +1599,7 @@ class OmniVoiceQtWindow(QMainWindow):
         r1_l = QVBoxLayout(r1)
         # r1_l.setContentsMargins(24, 24, 24, 24)
         # r1_l.setSpacing(12)
+        r1_l.addWidget(self._build_runtime_strip("Output", "Neu can test nhanh nhieu lan, dung Nhanh. Ban cuoi hay doi sang Chat luong."))
         r1_l.addWidget(self._panel_badge("Bước 4 · Tạo & xuất"), alignment=Qt.AlignLeft)
         r1_l.addWidget(self._label("Xuất File", "SectionTitle"))
         self.clone_generate_btn = QPushButton("BẮT ĐẦU TẠO GIỌNG")
@@ -994,12 +1632,14 @@ class OmniVoiceQtWindow(QMainWindow):
 
         self.clone_info = QPlainTextEdit()
         self.clone_info.setReadOnly(True)
+        self.clone_info.setObjectName("SummaryBox")
         self.clone_info.setMinimumHeight(132)
         self.clone_info.setMaximumHeight(220)
         r1_l.addWidget(self.clone_info)
         
         self.clone_log_info = QPlainTextEdit()
         self.clone_log_info.setReadOnly(True)
+        self.clone_log_info.setObjectName("LogBox")
         self.clone_log_info.setPlaceholderText("Log xử lý...")
         self.clone_log_info.setMinimumHeight(150)
         self.clone_log_info.setMaximumHeight(220)
@@ -1035,12 +1675,14 @@ class OmniVoiceQtWindow(QMainWindow):
         left_l = QVBoxLayout(left)
         # left_l.setContentsMargins(24, 24, 24, 24)
         # left_l.setSpacing(12)
+        left_l.addWidget(self._build_runtime_strip("Design", "Dung khi can tao giong moi. Preset Can bang hien la diem roi hop ly nhat."))
         left_l.addWidget(self._panel_badge("Bước 1 · Nội dung & concept"), alignment=Qt.AlignLeft)
         left_l.addWidget(self._label("Nội dung cần đọc", "SectionTitle"))
-        self.design_text = QPlainTextEdit()
+        self.design_text = SpellcheckTextEdit()
         self.design_text.setPlainText("Xin chào, đây là giọng nhân vật ảo trên bản desktop mới.")
         self.design_text.setMinimumHeight(150)
         self.design_text.setMaximumHeight(220)
+        self._attach_spellcheck(self.design_text)
         left_l.addWidget(self.design_text)
         left_l.addLayout(self._nonverbal_bar(self.design_text, lambda: None if self.design_lang.currentText() == "Tự động" else self.design_lang.currentText()))
         self.design_lang = QComboBox()
@@ -1086,12 +1728,14 @@ class OmniVoiceQtWindow(QMainWindow):
         right_l = QVBoxLayout(right)
         # right_l.setContentsMargins(24, 24, 24, 24)
         # right_l.setSpacing(12)
+        right_l.addWidget(self._build_runtime_strip("Preview", "Kiem tra toc do, do dai audio va so chunk ngay trong khung ket qua."))
         right_l.addWidget(self._panel_badge("Bước 3 · Xem kết quả"), alignment=Qt.AlignLeft)
         self.design_status = QLabel("Chưa tạo")
         self.design_status.setWordWrap(True)
         self.design_elapsed_label = QLabel("Thời gian tạo: 00:00")
         self.design_info = QPlainTextEdit()
         self.design_info.setReadOnly(True)
+        self.design_info.setObjectName("SummaryBox")
         self.design_info.setMinimumHeight(132)
         self.design_info.setMaximumHeight(220)
         self.design_play_btn = QPushButton("Phát kết quả")
@@ -1113,6 +1757,7 @@ class OmniVoiceQtWindow(QMainWindow):
 
         self.design_log_info = QPlainTextEdit()
         self.design_log_info.setReadOnly(True)
+        self.design_log_info.setObjectName("LogBox")
         self.design_log_info.setPlaceholderText("Log xử lý...")
         self.design_log_info.setMinimumHeight(150)
         self.design_log_info.setMaximumHeight(220)
@@ -1216,7 +1861,7 @@ class OmniVoiceQtWindow(QMainWindow):
         # self.preview_pos.setValue(0) # Removed because preview_pos is not an attribute anymore
         try:
             if Path(path).suffix.lower() in {".mp4", ".mov", ".mkv", ".avi"}:
-                extracted = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+                extracted = _named_temp_wav()
                 extracted.close()
                 self._extract_audio_from_video(path, extracted.name)
                 duration_audio = AudioSegment.from_file(extracted.name)
@@ -1285,7 +1930,7 @@ class OmniVoiceQtWindow(QMainWindow):
         suffix = Path(source).suffix.lower()
         working_source = source
         if suffix in {".mp4", ".mov", ".mkv", ".avi"}:
-            extracted = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            extracted = _named_temp_wav()
             extracted.close()
             self._extract_audio_from_video(source, extracted.name)
             working_source = extracted.name
@@ -1296,7 +1941,7 @@ class OmniVoiceQtWindow(QMainWindow):
         if end_sec <= start_sec:
             raise ValueError("Khoảng cắt không hợp lệ.")
         trimmed = audio[int(start_sec * 1000): int(end_sec * 1000)]
-        temp_ref = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        temp_ref = _named_temp_wav()
         temp_ref.close()
         trimmed.export(temp_ref.name, format="wav")
         self.current_processed_ref = temp_ref.name
@@ -1304,6 +1949,16 @@ class OmniVoiceQtWindow(QMainWindow):
 
     def _prepare_reference_preview(self):
         pass
+
+    def _cut_reference_audio_real(self):
+        try:
+            self._prepare_reference_audio()
+        except Exception as exc:
+            QMessageBox.critical(self, "Lỗi cắt âm thanh", str(exc))
+            return
+        self._save_processed_ref()
+        if self.current_processed_ref and os.path.exists(self.current_processed_ref):
+            self.clone_status.setText("Đã cắt thật đoạn âm thanh theo vùng đã chọn.")
 
     def _start_clone_generation(self):
         transcript = self.clone_ref_text.toPlainText().strip() or None
@@ -1538,6 +2193,25 @@ class OmniVoiceQtWindow(QMainWindow):
         self.session_manager.delete_session(session_id)
         self._refresh_recovery_list()
 
+    def _cleanup_current_output_artifact(self):
+        self.result_player.stop()
+        self.is_playing = False
+        self.play_result_btn.setText("Phát kết quả")
+        self.design_play_btn.setText("Phát kết quả")
+        output_path = self.current_output_path
+        session_id = self.current_output_session_id
+        self.current_output_path = None
+        self.current_output_session_id = None
+        self.audio_output = None
+        if session_id:
+            self.session_manager.delete_session(session_id)
+            self._refresh_recovery_list()
+        elif output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+
     def _reset_generation_ui(self, mode: str):
         self.active_mode = None
         self.generation_timer.stop()
@@ -1566,7 +2240,11 @@ class OmniVoiceQtWindow(QMainWindow):
             return
         self._active_worker_token = None
         self._reset_generation_ui(mode)
-        self.audio_output = audio
+        if self.current_output_path or self.current_output_session_id:
+            self._cleanup_current_output_artifact()
+        self.current_output_path = meta.get("final_audio_file")
+        self.current_output_session_id = meta.get("session_id")
+        self.audio_output = None
         elapsed_s = meta.get("elapsed_s") or self._elapsed_for_mode(mode)
         self._runtime_state[mode]["elapsed_offset_s"] = float(elapsed_s)
         self._refresh_recovery_list()
@@ -1611,6 +2289,7 @@ class OmniVoiceQtWindow(QMainWindow):
                     f"Duration ép: {meta.get('duration', 0.0)}",
                 ])
             )
+        self._play_completion_alert()
         self._log_event(mode, "DONE", f"Hoàn tất sau {elapsed_s:.2f}s. Audio đầu ra {meta.get('output_seconds', 0.0):.2f}s.")
 
     def _on_worker_error(self, mode: str, message: str, detail: str, worker_token: int | None = None):
@@ -1669,12 +2348,22 @@ class OmniVoiceQtWindow(QMainWindow):
 
     def _build_runtime_summary(self, mode: str, payload: dict) -> str:
         config = payload["generation_config"]
+        preset_name = "Tuy chinh"
+        for preset in _GENERATION_PRESETS.values():
+            if (
+                int(config.num_step) == int(preset["steps"])
+                and abs(float(config.guidance_scale) - float(preset["guidance"])) < 1e-9
+                and abs(float(payload.get("speed", 1.0)) - float(preset["speed"])) < 1e-9
+            ):
+                preset_name = preset["label"]
+                break
         lines = [
             f"Mode: {'Clone giọng' if mode == 'clone' else 'Thiết kế giọng'}",
             f"Thiết bị: {self._device_label()}",
             f"ASR: {'Bật' if getattr(self.model, '_asr_pipe', None) is not None else 'Tắt'}",
             f"Ngôn ngữ: {payload.get('language') or 'Tự động'}",
             f"Số ký tự đầu vào: {len(payload.get('text', ''))}",
+            f"Preset: {preset_name}",
             f"Inference steps: {config.num_step}",
             f"Guidance scale: {config.guidance_scale}",
             f"Khử ồn: {'Có' if config.denoise else 'Không'}",
@@ -1714,6 +2403,19 @@ class OmniVoiceQtWindow(QMainWindow):
         device = getattr(self.model, "device", None)
         return str(device or get_best_device()).upper()
 
+    def _play_completion_alert(self):
+        def beep_once():
+            if winsound is not None:
+                try:
+                    winsound.Beep(1350, 140)
+                    return
+                except Exception:
+                    pass
+            QApplication.beep()
+
+        for index in range(5):
+            QTimer.singleShot(index * 220, beep_once)
+
     def _refresh_runtime_badge(self):
         cuda_ok = torch.cuda.is_available()
         asr_on = getattr(self.model, "_asr_pipe", None) is not None
@@ -1740,26 +2442,28 @@ class OmniVoiceQtWindow(QMainWindow):
             self.design_log_info.appendPlainText(line)
 
     def _toggle_generated_audio(self):
-        if self.audio_output is None:
+        if not self.current_output_path or not os.path.exists(self.current_output_path):
             return
-        if self.is_playing:
-            sd.stop()
-            self.is_playing = False
-            self.play_result_btn.setText("Phát kết quả")
-            self.design_play_btn.setText("Phát kết quả")
+        if self.result_player.playbackState() == QMediaPlayer.PlayingState:
+            self.result_player.stop()
             return
-        self.is_playing = True
-        self.play_result_btn.setText("Dừng")
-        self.design_play_btn.setText("Dừng")
-        sd.play(self.audio_output, self.sampling_rate)
+        self.result_player.setSource(Path(self.current_output_path).as_uri())
+        self.result_player.play()
 
     def _save_output(self):
-        if self.audio_output is None:
+        if not self.current_output_path or not os.path.exists(self.current_output_path):
             return
         output, _ = QFileDialog.getSaveFileName(self, "Lưu WAV", "", "WAV (*.wav)")
         if output:
-            sf.write(output, self.audio_output, self.sampling_rate)
+            shutil.copy2(self.current_output_path, output)
             QMessageBox.information(self, "Đã lưu", output)
+
+    def _on_result_playback_state_changed(self, state):
+        is_playing = state == QMediaPlayer.PlayingState
+        self.is_playing = is_playing
+        label = "Dừng" if is_playing else "Phát kết quả"
+        self.play_result_btn.setText(label)
+        self.design_play_btn.setText(label)
 
     def _save_processed_ref(self):
         if not self.current_processed_ref or not os.path.exists(self.current_processed_ref):
@@ -1794,6 +2498,16 @@ class OmniVoiceQtWindow(QMainWindow):
             self.clone_log_info.appendPlainText(f"[SYS] {line}")
         if hasattr(self, "design_log_info"):
             self.design_log_info.appendPlainText(f"[SYS] {line}")
+
+    def closeEvent(self, event):
+        try:
+            self.result_player.stop()
+            self.media_player.stop()
+        except Exception:
+            pass
+        if self.current_output_path or self.current_output_session_id:
+            self._cleanup_current_output_artifact()
+        super().closeEvent(event)
 
 
 def main():

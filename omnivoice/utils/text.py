@@ -29,8 +29,8 @@ from typing import List, Optional
 from omnivoice.utils.vi_sensitive_terms import VI_PRONUNCIATION_SENSITIVE_TERMS
 
 
-SPLIT_PUNCTUATION = set(".,;:!?ã€‚ï¼Œï¼›ï¼šï¼ï¼Ÿ")
-CLOSING_MARKS = set("\"'""'ï¼‰]ã€‹ã€‹>ã€ã€‘")
+SPLIT_PUNCTUATION = set(".,;:!?。，；：！？")
+CLOSING_MARKS = set("\"'""'）]》》>ã€」")
 
 END_PUNCTUATION = {
     ";",
@@ -39,7 +39,7 @@ END_PUNCTUATION = {
     ".",
     "!",
     "?",
-    "â€¦",
+    "…",
     ")",
     "]",
     "}",
@@ -47,16 +47,16 @@ END_PUNCTUATION = {
     "'",
     """,
     "'",
-    "ï¼›",
-    "ï¼š",
-    "ï¼Œ",
-    "ã€‚",
-    "ï¼",
-    "ï¼Ÿ",
-    "ã€",
-    "â€¦â€¦",
-    "ï¼‰",
-    "ã€‘",
+    "；",
+    "：",
+    "，",
+    "。",
+    "！",
+    "？",
+    "』",
+    "……",
+    "）",
+    "」",
     """,
     "'",
 }
@@ -127,19 +127,19 @@ _SENSITIVE_END_RE = re.compile(
 
 
 VI_NONVERBAL_TAG_FALLBACKS = {
-    "[laughter]": " haha ",
-    "[sigh]": " háº§y... ",
-    "[confirmation-en]": " á»« ",
-    "[question-en]": " háº£? ",
-    "[question-ah]": " Ã¡? ",
-    "[question-oh]": " á»“? ",
-    "[question-ei]": " Ãª? ",
-    "[question-yi]": " Ã½? ",
-    "[surprise-ah]": " Ã¡! ",
-    "[surprise-oh]": " á»“ ",
-    "[surprise-wa]": " Ã²a ",
-    "[surprise-yo]": " Ã´i ",
-    "[dissatisfaction-hnn]": " há»« ",
+    "[laughter]": " hahaha ",
+    "[sigh]": " thở dài ",
+    "[confirmation-en]": " ừm ",
+    "[question-en]": " hử? ",
+    "[question-ah]": " á? ",
+    "[question-oh]": " ồ? ",
+    "[question-ei]": " ê? ",
+    "[question-yi]": " ý? ",
+    "[surprise-ah]": " á! ",
+    "[surprise-oh]": " ồ! ",
+    "[surprise-wa]": " oa! ",
+    "[surprise-yo]": " ôi! ",
+    "[dissatisfaction-hnn]": " hừm ",
 }
 
 _SUPPORTED_NONVERBAL_TAGS_PATTERN = "|".join(
@@ -269,94 +269,128 @@ def add_punctuation(text: str):
     if text[-1] not in END_PUNCTUATION:
         is_chinese = any("\u4e00" <= char <= "\u9fff" for char in text)
 
-        text += "ã€‚" if is_chinese else "."
+        text += "。" if is_chinese else "."
 
     return text
 
 
 def normalize_vietnamese_numbers(text: str, is_vi: bool = True) -> str:
-    """Normalize Vietnamese decimals (e.g. 372,5 -> 372 pháº©y 5) and thousands separators."""
+    """Normalize Vietnamese decimals (e.g. 372,5 -> 372 phẩy 5) and thousands separators."""
     import re
-    if not text:
+    if not text or not is_vi:
         return text
 
-    if not is_vi:
-        return text
+    # ── Bộ chuyển số → chữ tiếng Việt (built-in, không cần num2words) ──────
+    _DON_VI    = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín']
+    _HANG_CHUC = ['', 'mười', 'hai mươi', 'ba mươi', 'bốn mươi', 'năm mươi',
+                  'sáu mươi', 'bảy mươi', 'tám mươi', 'chín mươi']
 
-    # 1. Decimal commas: e.g. 372,5 -> 372 pháº©y 5
-    text = re.sub(r'\b(\d+),(\d+)\b', r'\1 pháº©y \2', text)
+    def _doc_nhom(nhom: int) -> str:
+        if nhom == 0:
+            return ''
+        tram = nhom // 100
+        chuc = (nhom % 100) // 10
+        dv   = nhom % 10
+        res  = ''
+        if tram > 0:
+            res += _DON_VI[tram] + ' trăm'
+        if chuc == 0 and dv > 0 and tram > 0:
+            res += ' lẻ ' + _DON_VI[dv]
+        elif chuc == 1:
+            res += ' mười'
+            if dv == 5:   res += ' lăm'
+            elif dv > 0:  res += ' ' + _DON_VI[dv]
+        elif chuc > 1:
+            res += ' ' + _HANG_CHUC[chuc]
+            if dv == 5:   res += ' lăm'
+            elif dv == 1: res += ' mốt'
+            elif dv > 0:  res += ' ' + _DON_VI[dv]
+        elif chuc == 0 and dv > 0 and tram == 0:
+            res += _DON_VI[dv]
+        return res.strip()
 
-    # 2. Decimal dots vs thousands separators:
-    # If fractional part after dot has exactly 3 digits (like 1.000 or 1.234), it's thousands separator -> remove it.
-    # Otherwise (like 372.5 or 1.2), it's a decimal dot -> replace with "pháº©y".
-    def replace_dot(match):
-        whole = match.group(1)
-        fraction = match.group(2)
+    def _so_ra_chu(n: int) -> str:
+        if n == 0:
+            return 'không'
+        res     = ''
+        ty      = n // 1_000_000_000
+        trieu   = (n % 1_000_000_000) // 1_000_000
+        nghin   = (n % 1_000_000) // 1_000
+        con_lai = n % 1_000
+        if ty > 0:
+            res += _doc_nhom(ty) + ' tỷ'
+        if trieu > 0:
+            if res: res += ' '
+            res += _doc_nhom(trieu) + ' triệu'
+        if nghin > 0:
+            if res: res += ' '
+            res += _doc_nhom(nghin) + ' nghìn'
+        if con_lai > 0:
+            if res: res += ' '
+            res += _doc_nhom(con_lai)
+        return res.strip()
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # 1. Ngày/tháng/năm: 12/06/2026 → ngày mười hai tháng sáu năm hai nghìn không trăm hai mươi sáu
+    def _replace_date(m):
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return f" ngày {_so_ra_chu(d)} tháng {_so_ra_chu(mo)} năm {_so_ra_chu(y)} "
+    text = re.sub(r'\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\b', _replace_date, text)
+
+    # 2. Giờ:phút: 14:30 → mười bốn giờ ba mươi phút
+    def _replace_time(m):
+        h, mn = int(m.group(1)), int(m.group(2))
+        return f" {_so_ra_chu(h)} giờ {_so_ra_chu(mn)} phút "
+    text = re.sub(r'\b(\d{1,2}):(\d{2})\b', _replace_time, text)
+
+    # 3. Phần trăm: 30% → ba mươi phần trăm
+    text = re.sub(r'(\d+)%', lambda m: _so_ra_chu(int(m.group(1))) + ' phần trăm', text)
+
+    # 4. Đơn vị tiền/đo lường dính sát số
+    text = re.sub(r'\b(\d+)\s*k\b',   lambda m: _so_ra_chu(int(m.group(1))) + ' nghìn',          text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*tr\b',  lambda m: _so_ra_chu(int(m.group(1))) + ' triệu',          text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*đ\b',   lambda m: _so_ra_chu(int(m.group(1))) + ' đồng',           text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*vnd\b', lambda m: _so_ra_chu(int(m.group(1))) + ' việt nam đồng',  text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*km\b',  lambda m: _so_ra_chu(int(m.group(1))) + ' ki lô mét',      text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*kg\b',  lambda m: _so_ra_chu(int(m.group(1))) + ' ki lô gam',      text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*cm\b',  lambda m: _so_ra_chu(int(m.group(1))) + ' xăng ti mét',    text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*m\b',   lambda m: _so_ra_chu(int(m.group(1))) + ' mét',             text, flags=re.IGNORECASE)
+
+    # 5. Số thập phân dấu phẩy: 372,5 → ba trăm bảy mươi hai phẩy năm
+    def _replace_decimal_comma(m):
+        whole      = _so_ra_chu(int(m.group(1)))
+        dec_digits = ' '.join([_DON_VI[int(d)] if d != '0' else 'không' for d in m.group(2)])
+        return f"{whole} phẩy {dec_digits}"
+    text = re.sub(r'\b(\d+),(\d{1,2})\b', _replace_decimal_comma, text)
+
+    # 6. Số thập phân dấu chấm (không phải phân cách nghìn): 372.5 → phẩy năm
+    def _replace_dot(m):
+        whole    = m.group(1)
+        fraction = m.group(2)
         if len(fraction) == 3:
-            return whole + fraction
-        else:
-            return whole + " pháº©y " + fraction
+            return whole + fraction   # phân cách nghìn → gộp lại
+        dec_digits = ' '.join([_DON_VI[int(d)] if d != '0' else 'không' for d in fraction])
+        return _so_ra_chu(int(whole)) + ' phẩy ' + dec_digits
+    text = re.sub(r'\b(\d+)\.(\d+)\b', _replace_dot, text)
 
-    text = re.sub(r'\b(\d+)\.(\d+)\b', replace_dot, text)
-
-    # 3. Clean up remaining thousands dots (e.g. 1.000.000 -> 1000000)
+    # 7. Dọn dấu chấm phân cách nghìn còn sót
     while True:
         new_text = re.sub(r'\b(\d+)\.(\d{3})\b', r'\1\2', text)
         if new_text == text:
             break
         text = new_text
 
-    # 4. Convert plain numbers to words using num2words if available
-    try:
-        from num2words import num2words
-        def number_to_vietnamese_words(match):
-            num_str = match.group(0)
-            try:
-                if " pháº©y " in num_str:
-                    parts = num_str.split(" pháº©y ")
-                    whole = num2words(int(parts[0]), lang='vi')
-                    # TÃ¡ch tá»«ng sá»‘ tháº­p phÃ¢n Ä‘á»ƒ Ä‘á»c cho tá»± nhiÃªn
-                    decimal_digits = " ".join([num2words(int(d), lang='vi') for d in parts[1]])
-                    return f"{whole} pháº©y {decimal_digits}"
-                else:
-                    return num2words(int(num_str), lang='vi')
-            except Exception:
-                return num_str
-        
-        # Match standalone numbers or numbers with "pháº©y"
-        text = re.sub(r'\b\d+(?: pháº©y \d+)?\b', number_to_vietnamese_words, text)
-    except ImportError:
-        pass # Fallback to original text if num2words is not installed
+    # 8. Số có dấu phẩy phân cách nghìn: 1,000,000 → một triệu
+    def _replace_comma_sep(m):
+        clean = m.group(0).replace(',', '')
+        try:
+            return _so_ra_chu(int(clean))
+        except Exception:
+            return m.group(0)
+    text = re.sub(r'\b\d{1,3}(?:,\d{3})+\b', _replace_comma_sep, text)
 
-    # 5. Thay tháº¿ ngÃ y thÃ¡ng nÄƒm
-    def replace_date(match):
-        day = match.group(1)
-        month = match.group(2)
-        year = match.group(3)
-        return f" ngÃ y {day} thÃ¡ng {month} nÄƒm {year} "
-    
-    text = re.sub(r'\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\b', replace_date, text)
-
-    # 6. Thay tháº¿ giá» phÃºt
-    def replace_time(match):
-        hour = match.group(1)
-        minute = match.group(2)
-        return f" {hour} giá» {minute} phÃºt "
-    
-    text = re.sub(r'\b(\d{1,2}):(\d{2})\b', replace_time, text)
-
-    # 7. Thay tháº¿ %
-    text = re.sub(r'(\d+)%', r'\1 pháº§n trÄƒm', text)
-    
-    # 8. Thay tháº¿ cÃ¡c Ä‘Æ¡n vá»‹ tiá»n tá»‡/Ä‘o lÆ°á»ng cÆ¡ báº£n (Ä‘á»ƒ trÃ¡nh bá»‹ Ä‘á»c nuá»‘t)
-    text = re.sub(r'\b(\d+)\s*k\b', r'\1 nghÃ¬n', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*tr\b', r'\1 triá»‡u', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*Ä‘\b', r'\1 Ä‘á»“ng', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*vnd\b', r'\1 viá»‡t nam Ä‘á»“ng', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*km\b', r'\1 ki lÃ´ mÃ©t', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*kg\b', r'\1 ki lÃ´ gam', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*m\b', r'\1 mÃ©t', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*cm\b', r'\1 xÄƒng ti mÃ©t', text, flags=re.IGNORECASE)
+    # 9. Số nguyên còn lại
+    text = re.sub(r'\b\d+\b', lambda m: _so_ra_chu(int(m.group(0))), text)
 
     return text.strip()
 
@@ -379,24 +413,25 @@ def map_vietnamese_emotions(text: str) -> str:
         text = re.sub(re.escape(tag), replacement, text, flags=re.IGNORECASE)
 
     # Laughter: haha, hahaha, hehe, hihi, hoho, ha ha, he he
-    text = re.sub(r'\b(ha\s*){2,}\b', ' haha ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(he\s*){2,}\b', ' hÃ© hÃ© hÃ© ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hi\s*){2,}\b', ' hÃ­ hÃ­ hÃ­ ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(hÃ´\s*){2,}\b', ' há»‘ há»‘ há»‘ ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(ho\s*){2,}\b', ' hÃ´ hÃ´ hÃ´ ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(ha\s*){2,}\b', ' hahaha ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(he\s*){2,}\b', ' he he he ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hi\s*){2,}\b', ' hi hi hi ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hô\s*){2,}\b', ' hô hô hô ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(ho\s*){2,}\b', ' hô hô hô ', text, flags=re.IGNORECASE)
 
-    # Sighs: haizz, thá»Ÿ dÃ i
-    text = re.sub(r'\bhaiz+\b', ' háº§y... ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bthá»Ÿ dÃ i\b', ' háº§y... ', text, flags=re.IGNORECASE)
+    # Sighs: haizz, thở dài
+    text = re.sub(r'\bhaiz+\b', ' haizz... ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bthở dài\b', ' haizz... ', text, flags=re.IGNORECASE)
 
-    # Dissatisfaction: há»«m, hmm
-    text = re.sub(r'\bh[Æ°á»«]m+\b', ' há»« ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bhm+\b', ' há»« ', text, flags=re.IGNORECASE)
+    # Dissatisfaction: hừm, hmm
+    text = re.sub(r'\bh[ưừ]m+\b', ' hừm ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bhm+\b', ' hừm ', text, flags=re.IGNORECASE)
 
     # Surprise cues without overriding existing question punctuation.
-    text = re.sub(r'\b[u]?[oÃ²]Ã (?!!|\?)\b', ' Ã²a ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bá»“+(?!!|\?)\b', ' á»“ ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bÃ¡+(?!!|\?)\b', ' Ã¡! ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b[u]?[oò]a(?!!|\?)\b', ' oa! ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bồ+(?!!|\?)\b', ' ồ! ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bá+(?!!|\?)\b', ' á! ', text, flags=re.IGNORECASE)
 
+    text = re.sub(r'(haizz\.\.\.)\s*(?:\.\.\.)+', r'\1', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()

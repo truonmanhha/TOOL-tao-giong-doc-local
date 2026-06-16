@@ -41,6 +41,7 @@ dependencies = [
     "numpy",
     "soundfile",
     "librosa",
+    "wordfreq",
 ]
 
 [project.optional-dependencies]

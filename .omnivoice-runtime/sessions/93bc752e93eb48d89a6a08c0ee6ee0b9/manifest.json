@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "session_id": "93bc752e93eb48d89a6a08c0ee6ee0b9",
+  "mode": "clone",
+  "status": "running",
+  "created_at": "2026-06-16T09:35:10+00:00",
+  "updated_at": "2026-06-16T09:35:10+00:00",
+  "text_preview": "Một cô gái vừa đặt mua một bảng tuần hoàn các nguyên tố hóa học phiên bản mẫu vật thực tế, lồn thật chứ,Tuy nhiên sau khi mở hộp, cô đã lên tiếng phản nàn rằng ",
+  "payload": {
+    "text": "Một cô gái vừa đặt mua một bảng tuần hoàn các nguyên tố hóa học phiên bản mẫu vật thực tế, lồn thật chứ,Tuy nhiên sau khi mở hộp, cô đã lên tiếng phản nàn rằng trong số một trăm mười tám nguyên tố, nhà sản xuất chỉ cung cấp cho cô đúng tám trăm mười ba loại Cô cho rằng người bán đã cất bớt nguyên liệu để chuộc lợi khi mà toàn bộ hàng biểu tượng hình chiếc quạt ở phía dưới hoàn toàn chống rỗng Thậm chí khi phát hiện ra mẫu vật vàng bên trong là thật, cô còn có ý định cậy nó ra để đem bán Nhưng có một sự thật khoa học mà cô không hề hay biết Việc nhà sản xuất để chống các ô đó không phải là keo kiệt mà là để bảo vệ mạng sống của chính cô Biểu tượng chiếc quạt mà cô nhìn thấy thực chất là ký hiệu cảnh báo bức xạ nguy hiểm Những ô bị bỏ trống đó chính là vị trí của các nguyên tố phóng xạ cực độc và có thời gian bán giã cực ngắn như uranium, polonium hay francium Nếu nhà sản xuất thực sự lấp đầy hàng quạt gió này bằng các mẫu vật nguyên chất thì thứ mà cô gái nhận được sẽ là một khối lượng tối hạn đủ để kích hoạt một phản ứng dây chuyền và tạo ra một vụ nổ hạt nhân hủy diệt ngay trong phòng khách Yeah, đăng kí kênh cho tao",
+    "language": null,
+    "generation_config": {
+      "num_step": 16,
+      "guidance_scale": 1.5,
+      "t_shift": 0.1,
+      "layer_penalty_factor": 5.0,
+      "position_temperature": 5.0,
+      "class_temperature": 0.0,
+      "denoise": true,
+      "preprocess_prompt": true,
+      "postprocess_output": true,
+      "audio_chunk_duration": 15.0,
+      "audio_chunk_threshold": 30.0
+    },
+    "ref_audio": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\93bc752e93eb48d89a6a08c0ee6ee0b9\\artifacts\\reference.wav",
+    "ref_text": null,
+    "speed": 1.15,
+    "duration": 0.0,
+    "start": 0.0,
+    "end": 24.84,
+    "chunk_chars": 260
+  },
+  "chunks": [
+    {
+      "index": 0,
+      "text": "Một cô gái vừa đặt mua một bảng tuần hoàn các nguyên tố hóa học phiên bản mẫu vật thực tế,",
+      "status": "pending",
+      "audio_file": null
+    },
+    {
+      "index": 1,
+      "text": "lồn thật chứ, Tuy nhiên sau khi mở hộp,",
+      "status": "pending",
+      "audio_file": null
+    },
+    {
+      "index": 2,
+      "text": "cô đã lên tiếng phản nàn rằng trong số một trăm mười tám nguyên tố,",
+      "status": "pending",
+      "audio_file": null
+    },
+    {
+      "index": 3,
+      "text": "nhà sản xuất chỉ cung cấp cho cô đúng tám trăm mười ba loại Cô cho rằng người bán đã cất bớt nguyên liệu để chuộc lợi khi mà toàn bộ hàng biểu tượng hình chiếc quạt ở phía dưới hoàn toàn chống rỗng Thậm chí khi phát hiện ra mẫu vật vàng bên trong là thật,",
+      "status": "pending",
+      "audio_file": null
+    },
+    {
+      "index": 4,
+      "text": "cô còn có ý định cậy nó ra để đem bán Nhưng có một sự thật khoa học mà cô không hề hay biết Việc nhà sản xuất để chống các ô đó không phải là keo kiệt mà là để bảo vệ mạng sống của chính cô Biểu tượng chiếc quạt mà cô nhìn thấy thực chất là ký hiệu cảnh báo bức xạ nguy hiểm Những ô bị bỏ trống đó chính là vị trí của các nguyên tố phóng xạ cực độc và có thời gian bán giã cực ngắn như uranium,",
+      "status": "pending",
+      "audio_file": null
+    },
+    {
+      "index": 5,
+      "text": "polonium hay francium Nếu nhà sản xuất thực sự lấp đầy hàng quạt gió này bằng các mẫu vật nguyên chất thì thứ mà cô gái nhận được sẽ là một khối lượng tối hạn đủ để kích hoạt một phản ứng dây chuyền và tạo ra một vụ nổ hạt nhân hủy diệt ngay trong phòng khách Yeah, đăng kí kênh cho tao",
+      "status": "pending",
+      "audio_file": null
+    }
+  ],
+  "timing": {
+    "elapsed_active_s": 0.0,
+    "run_started_at": "2026-06-16T09:35:10+00:00"
+  },
+  "artifacts": {
+    "reference_audio": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\93bc752e93eb48d89a6a08c0ee6ee0b9\\artifacts\\reference.wav",
+    "final_audio": null
+  },
+  "error": null
+}
