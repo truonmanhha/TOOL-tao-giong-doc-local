@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "session_id": "dcd2bb85ab5d46e79fd6c4072502e592",
+  "mode": "clone",
+  "status": "completed",
+  "created_at": "2026-06-22T11:56:18+00:00",
+  "updated_at": "2026-06-22T11:56:43+00:00",
+  "text_preview": "Tại sao người châu Phi dù Đói cũng không ăn hải sản À thì ra là do Châu Phi dầu hải sản nhưng vì điều kiện vật chất địa phương chưa đủ tốt cách chế biến thức ăn",
+  "payload": {
+    "text": "Tại sao người châu Phi dù Đói cũng không ăn hải sản À thì ra là do Châu Phi dầu hải sản nhưng vì điều kiện vật chất địa phương chưa đủ tốt cách chế biến thức ăn rất đơn giản chỉ cần rắc một ít muối và cho nước vào sau đó nấu lên là xong Bởi thế nên hải sản sau khi chế biến có mùi vị không ngon thứ hai khí hậu ở Châu Phi nóng khiến cho hải sản dễ bị hư hỏng Cộng với việc không có tủ lạnh để giữ tươi nên việc bảo quản hải sản càng khó khăn Ngoài ra do sự khác biệt về văn hóa ẩm thực hải sản ở trong mắt họ cũng giống như rau luộc mà chúng ta thường ăn vì vậy nên họ không nghĩ đó là món ngon , kẻ thừa kẻ thiếu người có người thèm , cuộc đời thật bất công",
+    "language": null,
+    "generation_config": {
+      "num_step": 32,
+      "guidance_scale": 2.0,
+      "t_shift": 0.1,
+      "layer_penalty_factor": 5.0,
+      "position_temperature": 5.0,
+      "class_temperature": 0.0,
+      "denoise": true,
+      "preprocess_prompt": true,
+      "postprocess_output": true,
+      "audio_chunk_duration": 15.0,
+      "audio_chunk_threshold": 30.0
+    },
+    "ref_audio": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\dcd2bb85ab5d46e79fd6c4072502e592\\artifacts\\reference.wav",
+    "ref_text": null,
+    "clone_prompt_cache_key": "3a8b1ab33710dff2e26275e68a81e3f759ff599825410f2e81a69262ec7be15e",
+    "speed": 1.0,
+    "duration": 0.0,
+    "start": 0.0,
+    "end": 3.88,
+    "chunk_chars": 260
+  },
+  "chunks": [
+    {
+      "index": 0,
+      "text": "Tại sao người châu Phi dù Đói cũng không ăn hải sản À thì ra là do Châu Phi dầu hải sản nhưng vì điều kiện vật chất địa phương chưa đủ tốt cách chế biến thức ăn rất đơn giản chỉ cần rắc một ít muối và cho nước vào sau đó nấu lên là xong Bởi thế nên hải sản sau khi chế biến có mùi vị không ngon thứ hai khí hậu ở Châu Phi nóng khiến cho hải sản dễ bị hư hỏng Cộng với việc không có tủ lạnh để giữ tươi nên việc bảo quản hải sản càng khó khăn Ngoài ra do sự khác biệt về văn hóa ẩm thực hải sản ở trong mắt họ cũng giống như rau luộc mà chúng ta thường ăn vì vậy nên họ không nghĩ đó là món ngon,",
+      "status": "completed",
+      "audio_file": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\dcd2bb85ab5d46e79fd6c4072502e592\\chunks\\0000.wav"
+    },
+    {
+      "index": 1,
+      "text": "kẻ thừa kẻ thiếu người có người thèm, cuộc đời thật bất công",
+      "status": "completed",
+      "audio_file": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\dcd2bb85ab5d46e79fd6c4072502e592\\chunks\\0001.wav"
+    }
+  ],
+  "timing": {
+    "elapsed_active_s": 24.252618200000143,
+    "run_started_at": null
+  },
+  "artifacts": {
+    "reference_audio": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\dcd2bb85ab5d46e79fd6c4072502e592\\artifacts\\reference.wav",
+    "final_audio": "D:\\ALL TOOL\\TOOL LÀM YOUTUBE\\Ominivoice tao giong doc local\\.omnivoice-runtime\\sessions\\dcd2bb85ab5d46e79fd6c4072502e592\\artifacts\\final.wav"
+  },
+  "error": null
+}

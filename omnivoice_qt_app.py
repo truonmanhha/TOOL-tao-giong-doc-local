@@ -10,8 +10,9 @@ import traceback
 import threading
 import re
 import difflib
+import hashlib
 from pathlib import Path
-from collections import Counter
+from collections import Counter, OrderedDict
 
 try:
     import winsound
@@ -171,6 +172,8 @@ _GENERATION_PRESETS = {
 
 
 _LOCAL_TEMP_ROOT = get_temp_root()
+_VOICE_PROMPT_CACHE_MAX = 4
+_REFERENCE_AUDIO_CACHE_MAX = 4
 
 
 def _named_temp_wav() -> tempfile.NamedTemporaryFile:
@@ -547,12 +550,20 @@ class GenerationWorker(QThread):
     error = Signal(str, str)
     progress = Signal(str, int)
 
-    def __init__(self, model: OmniVoice, mode: str, payload: dict, session_manager: SessionManager | None = None):
+    def __init__(
+        self,
+        model: OmniVoice,
+        mode: str,
+        payload: dict,
+        session_manager: SessionManager | None = None,
+        voice_prompt_cache: OrderedDict | None = None,
+    ):
         super().__init__()
         self.model = model
         self.mode = mode
         self.payload = payload
         self.session_manager = session_manager
+        self.voice_prompt_cache = voice_prompt_cache
         self._is_cancelled = False
         self._cancel_event = threading.Event()
 
@@ -568,6 +579,35 @@ class GenerationWorker(QThread):
         sf.write(str(temp_path), chunk_audio, self.model.sampling_rate, format="WAV")
         os.replace(temp_path, chunk_path)
         return str(chunk_path)
+
+    def _get_cached_voice_prompt(self):
+        cache_key = self.payload.get("clone_prompt_cache_key")
+        if not cache_key or self.voice_prompt_cache is None:
+            return None
+        prompt = self.voice_prompt_cache.get(cache_key)
+        if prompt is not None:
+            self.voice_prompt_cache.move_to_end(cache_key)
+        return prompt
+
+    def _set_cached_voice_prompt(self, prompt) -> None:
+        cache_key = self.payload.get("clone_prompt_cache_key")
+        if not cache_key or self.voice_prompt_cache is None:
+            return
+        self.voice_prompt_cache[cache_key] = prompt
+        self.voice_prompt_cache.move_to_end(cache_key)
+        while len(self.voice_prompt_cache) > _VOICE_PROMPT_CACHE_MAX:
+            self.voice_prompt_cache.popitem(last=False)
+
+    def _get_or_create_voice_prompt(self):
+        prompt = self._get_cached_voice_prompt()
+        if prompt is not None:
+            return prompt
+        prompt = self.model.create_voice_clone_prompt(
+            ref_audio=self.payload["ref_audio"],
+            ref_text=self.payload["ref_text"],
+        )
+        self._set_cached_voice_prompt(prompt)
+        return prompt
 
     def _is_cuda_run(self) -> bool:
         device = str(getattr(self.model, "device", "") or "").lower()
@@ -692,10 +732,7 @@ class GenerationWorker(QThread):
             if self.mode == "clone":
                 self._raise_if_cancelled()
                 self.progress.emit("Đang tạo prompt clone từ file mẫu...", 20)
-                prompt = self.model.create_voice_clone_prompt(
-                    ref_audio=self.payload["ref_audio"],
-                    ref_text=self.payload["ref_text"],
-                )
+                prompt = self._get_or_create_voice_prompt()
                 kwargs = {
                     "text": self.payload["text"],
                     "language": self.payload["language"],
@@ -852,9 +889,15 @@ class OmniVoiceQtWindow(QMainWindow):
         self._finished_workers = []
         self.is_playing = False
         self.session_manager = SessionManager()
+        self._voice_prompt_cache = OrderedDict()
+        self._reference_audio_cache = OrderedDict()
         self.generation_timer = QTimer(self)
         self.generation_timer.setInterval(1000)
         self.generation_timer.timeout.connect(self._refresh_elapsed_labels)
+        self._text_tools_stats_timer = QTimer(self)
+        self._text_tools_stats_timer.setSingleShot(True)
+        self._text_tools_stats_timer.setInterval(250)
+        self._text_tools_stats_timer.timeout.connect(self._refresh_text_tools_stats)
         self._runtime_state = {
             "clone": {"started_at": None, "payload": None, "elapsed_offset_s": 0.0, "session_id": None},
             "design": {"started_at": None, "payload": None, "elapsed_offset_s": 0.0, "session_id": None},
@@ -892,6 +935,7 @@ class OmniVoiceQtWindow(QMainWindow):
             
         try:
             self.model.to(target_device)
+            self._voice_prompt_cache.clear()
             # Update ASR model if loaded
             if getattr(self.model, "_asr_pipe", None) is not None:
                 self.model._asr_pipe.model.to(target_device)
@@ -1046,7 +1090,7 @@ class OmniVoiceQtWindow(QMainWindow):
         self.text_tools_editor = SpellcheckTextEdit()
         self.text_tools_editor.setPlaceholderText("D\u00e1n n\u1ed9i dung ho\u1eb7c upload file v\u00e0o \u0111\u00e2y...")
         self.text_tools_editor.setMinimumHeight(380)
-        self.text_tools_editor.textChanged.connect(self._refresh_text_tools_stats)
+        self.text_tools_editor.textChanged.connect(self._schedule_text_tools_stats_refresh)
         self._attach_spellcheck(self.text_tools_editor)
         left_l.addWidget(self.text_tools_editor, 1)
 
@@ -1135,9 +1179,15 @@ class OmniVoiceQtWindow(QMainWindow):
         QTimer.singleShot(0, self._refresh_text_tools_stats)
         return page
 
+    def _schedule_text_tools_stats_refresh(self):
+        if hasattr(self, "_text_tools_stats_timer"):
+            self._text_tools_stats_timer.start()
+
     def _refresh_text_tools_stats(self):
         if not hasattr(self, "text_tools_editor") or not hasattr(self, "text_tools_stats"):
             return
+        if hasattr(self, "_text_tools_stats_timer") and self._text_tools_stats_timer.isActive():
+            self._text_tools_stats_timer.stop()
         text = self.text_tools_editor.toPlainText()
         words = len([word for word in re.split(r"\s+", text.strip()) if word])
         chars = len(text)
@@ -1927,6 +1977,17 @@ class OmniVoiceQtWindow(QMainWindow):
         source = self.clone_file.text().strip()
         if not source:
             raise ValueError("Chưa chọn file mẫu.")
+        start_sec = self.trim_start.value()
+        end_sec = self.trim_end.value()
+        if end_sec <= start_sec:
+            raise ValueError("Khoang cat khong hop le.")
+
+        cache_key = self._build_reference_audio_cache_key(source, start_sec, end_sec)
+        cached_ref = self._get_cached_reference_audio(cache_key)
+        if cached_ref:
+            self.current_processed_ref = cached_ref
+            return cached_ref, start_sec, end_sec
+
         suffix = Path(source).suffix.lower()
         working_source = source
         if suffix in {".mp4", ".mov", ".mkv", ".avi"}:
@@ -1945,7 +2006,89 @@ class OmniVoiceQtWindow(QMainWindow):
         temp_ref.close()
         trimmed.export(temp_ref.name, format="wav")
         self.current_processed_ref = temp_ref.name
+        self._set_cached_reference_audio(cache_key, temp_ref.name)
         return temp_ref.name, start_sec, end_sec
+
+    def _build_reference_audio_cache_key(
+        self,
+        source: str,
+        start_sec: float,
+        end_sec: float,
+    ) -> str | None:
+        if not source:
+            return None
+        try:
+            source_path = Path(source).resolve()
+            stat = source_path.stat()
+        except OSError:
+            return None
+
+        digest = hashlib.sha256()
+        parts = [
+            "reference-audio-v1",
+            str(source_path),
+            str(stat.st_mtime_ns),
+            str(stat.st_size),
+            str(int(round(start_sec * 1000))),
+            str(int(round(end_sec * 1000))),
+        ]
+        for part in parts:
+            digest.update(part.encode("utf-8", errors="surrogatepass"))
+            digest.update(b"\0")
+        return digest.hexdigest()
+
+    def _get_cached_reference_audio(self, cache_key: str | None) -> str | None:
+        if not cache_key:
+            return None
+        cached_path = self._reference_audio_cache.get(cache_key)
+        if not cached_path:
+            return None
+        if not os.path.exists(cached_path):
+            self._reference_audio_cache.pop(cache_key, None)
+            return None
+        self._reference_audio_cache.move_to_end(cache_key)
+        return cached_path
+
+    def _set_cached_reference_audio(self, cache_key: str | None, audio_path: str) -> None:
+        if not cache_key or not audio_path:
+            return
+        self._reference_audio_cache[cache_key] = audio_path
+        self._reference_audio_cache.move_to_end(cache_key)
+        while len(self._reference_audio_cache) > _REFERENCE_AUDIO_CACHE_MAX:
+            self._reference_audio_cache.popitem(last=False)
+
+    def _build_clone_prompt_cache_key(
+        self,
+        source: str,
+        start_sec: float,
+        end_sec: float,
+        transcript: str | None,
+        preprocess_prompt: bool,
+    ) -> str | None:
+        if not source:
+            return None
+        try:
+            source_path = Path(source).resolve()
+            stat = source_path.stat()
+        except OSError:
+            return None
+
+        digest = hashlib.sha256()
+        parts = [
+            "clone-prompt-v1",
+            str(source_path),
+            str(stat.st_mtime_ns),
+            str(stat.st_size),
+            str(int(round(start_sec * 1000))),
+            str(int(round(end_sec * 1000))),
+            transcript or "",
+            str(bool(preprocess_prompt)),
+            str(getattr(self.model, "sampling_rate", self.sampling_rate)),
+        ]
+        for part in parts:
+            digest.update(part.encode("utf-8", errors="surrogatepass"))
+            digest.update(b"\0")
+        return digest.hexdigest()
 
     def _prepare_reference_preview(self):
         pass
@@ -1976,12 +2119,20 @@ class OmniVoiceQtWindow(QMainWindow):
             return
         self.clone_generate_btn.setEnabled(False)
         self.clone_status.setText("Đang clone giọng...")
+        generation_config = self._build_generation_config("clone")
         payload = {
             "text": self.clone_text.toPlainText().strip(),
             "language": None if self.clone_lang.currentText() == "Tự động" else self.clone_lang.currentText(),
-            "generation_config": self._build_generation_config("clone"),
+            "generation_config": generation_config,
             "ref_audio": ref_path,
             "ref_text": transcript,
+            "clone_prompt_cache_key": self._build_clone_prompt_cache_key(
+                self.clone_file.text().strip(),
+                start_sec,
+                end_sec,
+                transcript,
+                generation_config.preprocess_prompt,
+            ),
             "speed": float(self.clone_speed.value()),
             "duration": float(self.clone_duration.value()),
             "start": start_sec,
@@ -2095,7 +2246,13 @@ class OmniVoiceQtWindow(QMainWindow):
             self._log_event(mode, "INFO", "Đã bắt đầu job thiết kế giọng.")
             
         self.generation_timer.start()
-        self.worker = GenerationWorker(self.model, mode, payload, self.session_manager)
+        self.worker = GenerationWorker(
+            self.model,
+            mode,
+            payload,
+            self.session_manager,
+            self._voice_prompt_cache,
+        )
         self.worker.progress.connect(lambda text, val, m=mode, t=worker_token: self._update_progress(m, text, val, t))
         self.worker.success.connect(lambda audio, meta, m=mode, t=worker_token: self._on_worker_success(m, audio, meta, t))
         self.worker.error.connect(lambda message, detail, m=mode, t=worker_token: self._on_worker_error(m, message, detail, t))
