@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 SESSION_SCHEMA_VERSION = 1
-RECOVERABLE_STATUSES = {"running", "interrupted", "failed"}
+RECOVERABLE_STATUSES = {"running", "interrupted", "failed", "cancelled"}
 
 
 def utc_now_iso() -> str:

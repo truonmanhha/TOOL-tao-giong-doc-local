@@ -20,6 +20,7 @@ except Exception:
     winsound = None
 
 import imageio_ffmpeg
+import librosa
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -183,6 +184,244 @@ def _named_temp_wav() -> tempfile.NamedTemporaryFile:
         suffix=".wav",
         dir=str(_LOCAL_TEMP_ROOT),
     )
+
+
+def _merge_intervals(intervals: list[tuple[float, float]], max_gap_s: float) -> list[tuple[float, float]]:
+    if not intervals:
+        return []
+    merged: list[tuple[float, float]] = [intervals[0]]
+    for start_sec, end_sec in intervals[1:]:
+        prev_start, prev_end = merged[-1]
+        if start_sec - prev_end <= max_gap_s:
+            merged[-1] = (prev_start, max(prev_end, end_sec))
+        else:
+            merged.append((start_sec, end_sec))
+    return merged
+
+
+def _format_auto_reference_reason(metrics: dict[str, float]) -> str:
+    parts: list[str] = []
+    speech_ratio = metrics.get("speech_ratio", 0.0)
+    silence_ratio = metrics.get("silence_ratio", 1.0)
+    stability = metrics.get("loudness_stability", 0.0)
+    if speech_ratio >= 0.78:
+        parts.append("giọng nói liên tục")
+    elif speech_ratio >= 0.58:
+        parts.append("đủ nhiều giọng nói")
+    if silence_ratio <= 0.18:
+        parts.append("ít khoảng lặng")
+    if stability >= 0.72:
+        parts.append("âm lượng ổn định")
+    if metrics.get("flatness_penalty", 1.0) <= 0.12:
+        parts.append("ít nhiễu nền")
+    return ", ".join(parts[:3]) or "ưu tiên đoạn rõ giọng và dễ clone"
+
+
+def _auto_select_reference_segment(
+    audio: np.ndarray,
+    sampling_rate: int,
+    min_duration_s: float = 6.0,
+    target_duration_s: float = 10.0,
+    max_duration_s: float = 18.0,
+) -> dict[str, float | str]:
+    mono_audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+    if mono_audio.size == 0 or sampling_rate <= 0:
+        return {
+            "start_sec": 0.0,
+            "end_sec": 0.0,
+            "score": 0.0,
+            "reason": "không có dữ liệu âm thanh",
+        }
+
+    total_duration_s = mono_audio.size / float(sampling_rate)
+    if total_duration_s <= min_duration_s:
+        return {
+            "start_sec": 0.0,
+            "end_sec": total_duration_s,
+            "score": 0.0,
+            "reason": "file ngắn, dùng toàn bộ đoạn hiện có",
+        }
+
+    frame_length = min(2048, max(512, int(sampling_rate * 0.08)))
+    hop_length = min(512, max(128, int(sampling_rate * 0.02)))
+    rms = librosa.feature.rms(y=mono_audio, frame_length=frame_length, hop_length=hop_length, center=True)[0]
+    peak_rms = float(np.max(rms)) if rms.size else 0.0
+    if peak_rms <= 1e-6:
+        end_sec = min(total_duration_s, target_duration_s)
+        return {
+            "start_sec": 0.0,
+            "end_sec": end_sec,
+            "score": 0.0,
+            "reason": "âm thanh quá nhỏ, dùng đoạn đầu để bạn kiểm tra lại",
+        }
+
+    active_threshold = max(float(np.percentile(rms, 35)) * 1.6, peak_rms * 0.18, 1e-4)
+    non_silent = librosa.effects.split(
+        mono_audio,
+        top_db=32,
+        frame_length=frame_length,
+        hop_length=hop_length,
+    )
+    intervals = [
+        (start / float(sampling_rate), end / float(sampling_rate))
+        for start, end in non_silent
+        if (end - start) / float(sampling_rate) >= 0.35
+    ]
+    merged_intervals = _merge_intervals(intervals, max_gap_s=0.35)
+
+    candidate_duration_s = float(min(max(target_duration_s, min_duration_s), max_duration_s, total_duration_s))
+    window_step_s = max(0.75, candidate_duration_s / 4.0)
+    max_start_s = max(0.0, total_duration_s - candidate_duration_s)
+
+    candidate_starts: list[float] = []
+    start_cursor = 0.0
+    while start_cursor <= max_start_s + 1e-6:
+        candidate_starts.append(min(start_cursor, max_start_s))
+        start_cursor += window_step_s
+
+    for start_sec, end_sec in merged_intervals:
+        span = end_sec - start_sec
+        if span <= 0:
+            continue
+        if span <= candidate_duration_s:
+            center_start = max(0.0, min(start_sec - (candidate_duration_s - span) / 2.0, max_start_s))
+            candidate_starts.append(center_start)
+        else:
+            inner_cursor = start_sec
+            inner_stop = max(start_sec, end_sec - candidate_duration_s)
+            while inner_cursor <= inner_stop + 1e-6:
+                candidate_starts.append(min(inner_cursor, max_start_s))
+                inner_cursor += max(0.75, candidate_duration_s / 3.0)
+
+    best_result: dict[str, float | str] | None = None
+    evaluated_starts = sorted({round(start, 3) for start in candidate_starts})
+    global_peak = float(np.max(np.abs(mono_audio))) or 1.0
+
+    for start_sec in evaluated_starts:
+        end_sec = min(total_duration_s, start_sec + candidate_duration_s)
+        start_index = int(round(start_sec * sampling_rate))
+        end_index = int(round(end_sec * sampling_rate))
+        segment = mono_audio[start_index:end_index]
+        if segment.size < int(sampling_rate * max(1.0, min_duration_s * 0.5)):
+            continue
+
+        seg_rms = librosa.feature.rms(y=segment, frame_length=frame_length, hop_length=hop_length, center=True)[0]
+        if not seg_rms.size:
+            continue
+        speech_mask = seg_rms >= active_threshold
+        speech_ratio = float(np.mean(speech_mask))
+        silence_ratio = 1.0 - speech_ratio
+        active_rms = seg_rms[speech_mask]
+        if active_rms.size:
+            loudness_stability = 1.0 - min(1.0, float(np.std(active_rms) / (np.mean(active_rms) + 1e-6)))
+            mean_active_rms = float(np.mean(active_rms))
+        else:
+            loudness_stability = 0.0
+            mean_active_rms = float(np.mean(seg_rms))
+
+        flatness = float(np.mean(librosa.feature.spectral_flatness(y=segment + 1e-8, n_fft=1024, hop_length=hop_length)))
+        clipped_ratio = float(np.mean(np.abs(segment) >= 0.98))
+        normalized_loudness = min(1.0, mean_active_rms / max(active_threshold * 2.5, 1e-4))
+        flatness_penalty = min(1.0, flatness / 0.35)
+        clip_penalty = min(1.0, clipped_ratio * 10.0)
+        duration_penalty = abs((end_sec - start_sec) - target_duration_s) / max(target_duration_s, 1e-6)
+        score = (
+            speech_ratio * 4.5
+            + loudness_stability * 2.0
+            + normalized_loudness * 1.2
+            - silence_ratio * 2.8
+            - flatness_penalty * 1.3
+            - clip_penalty * 2.0
+            - duration_penalty * 0.3
+        )
+
+        result = {
+            "start_sec": float(start_sec),
+            "end_sec": float(end_sec),
+            "score": float(score),
+            "reason": _format_auto_reference_reason(
+                {
+                    "speech_ratio": speech_ratio,
+                    "silence_ratio": silence_ratio,
+                    "loudness_stability": loudness_stability,
+                    "flatness_penalty": flatness_penalty,
+                }
+            ),
+            "speech_ratio": speech_ratio,
+            "silence_ratio": silence_ratio,
+            "loudness_stability": loudness_stability,
+            "flatness_penalty": flatness_penalty,
+            "peak_ratio": min(1.0, float(np.max(np.abs(segment))) / global_peak),
+        }
+        if best_result is None or float(result["score"]) > float(best_result["score"]):
+            best_result = result
+
+    if best_result is None:
+        fallback_end = min(total_duration_s, target_duration_s)
+        return {
+            "start_sec": 0.0,
+            "end_sec": fallback_end,
+            "score": 0.0,
+            "reason": "không tìm được đoạn nổi bật, tạm chọn đoạn đầu",
+        }
+    return best_result
+
+
+def _completed_chunk_files_from_manifest(manifest: dict) -> list[str]:
+    chunk_files: list[str] = []
+    for chunk in manifest.get("chunks") or []:
+        audio_file = chunk.get("audio_file")
+        if chunk.get("status") == "completed" and audio_file and os.path.exists(audio_file):
+            chunk_files.append(audio_file)
+            continue
+        if chunk_files:
+            break
+    return chunk_files
+
+
+def _stitch_chunk_files_to_wav(
+    chunk_files: list[str],
+    output_path: str | Path,
+    pause_seconds: float = 0.05,
+) -> tuple[str | None, float]:
+    if not chunk_files:
+        return None, 0.0
+
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = destination.with_suffix(destination.suffix + ".tmp")
+
+    total_frames = 0
+    with sf.SoundFile(chunk_files[0], "r") as first_chunk:
+        samplerate = int(first_chunk.samplerate)
+        channels = int(first_chunk.channels)
+        subtype = first_chunk.subtype or "PCM_16"
+
+    pause_frames = max(0, int(samplerate * pause_seconds))
+    pause_block = np.zeros((pause_frames, channels), dtype=np.float32) if pause_frames else None
+
+    with sf.SoundFile(
+        str(temp_path),
+        mode="w",
+        samplerate=samplerate,
+        channels=channels,
+        subtype=subtype,
+        format="WAV",
+    ) as output_file:
+        for index, chunk_file in enumerate(chunk_files):
+            with sf.SoundFile(chunk_file, "r") as input_file:
+                while True:
+                    block = input_file.read(frames=65536, dtype="float32", always_2d=True)
+                    if block.size == 0:
+                        break
+                    output_file.write(block)
+                    total_frames += len(block)
+            if pause_block is not None and index < len(chunk_files) - 1:
+                output_file.write(pause_block)
+                total_frames += pause_frames
+
+    os.replace(temp_path, destination)
+    return str(destination), total_frames / float(samplerate)
 
 
 def parse_srt_blocks(srt_content: str) -> str:
@@ -580,6 +819,19 @@ class GenerationWorker(QThread):
         os.replace(temp_path, chunk_path)
         return str(chunk_path)
 
+    def _build_output_from_session_chunks(self) -> tuple[str | None, float]:
+        session_id = self.payload.get("session_id")
+        if not session_id or not self.session_manager:
+            return None, 0.0
+        manifest = self.session_manager.load_session(session_id)
+        chunk_files = _completed_chunk_files_from_manifest(manifest)
+        if not chunk_files:
+            return None, 0.0
+        return _stitch_chunk_files_to_wav(
+            chunk_files,
+            self.session_manager.final_output_path(session_id),
+        )
+
     def _get_cached_voice_prompt(self):
         cache_key = self.payload.get("clone_prompt_cache_key")
         if not cache_key or self.voice_prompt_cache is None:
@@ -758,7 +1010,6 @@ class GenerationWorker(QThread):
                 kwargs["duration"] = self.payload["duration"]
 
             chunks = self._split_text_chunks(self.payload["text"])
-            generated_parts = list(self.payload.get("preloaded_parts") or [])
             total_chunks = len(chunks)
             resume_from_index = int(self.payload.get("resume_from_chunk_index") or 0)
             for chunk_index, chunk_text in enumerate(chunks):
@@ -785,17 +1036,8 @@ class GenerationWorker(QThread):
                         chunk_file,
                         self._active_elapsed_s(started_at),
                     )
-                generated_parts.append(chunk_audio)
+                del chunk_audio
                 self._soft_throttle_cuda(time.perf_counter() - chunk_started_at)
-
-            if len(generated_parts) == 1:
-                final_audio = generated_parts[0]
-            else:
-                pause = np.zeros(int(self.model.sampling_rate * 0.05), dtype=generated_parts[0].dtype)
-                with_pauses = []
-                for part in generated_parts:
-                    with_pauses.extend([part, pause])
-                final_audio = np.concatenate(with_pauses[:-1], axis=-1)
                 
             # --- DÃ¡Â»Ân dÃ¡ÂºÂ¹p GPU ngay sau khi tÃ¡ÂºÂ¡o xong ---
             try:
@@ -816,30 +1058,24 @@ class GenerationWorker(QThread):
                 "duration": self.payload.get("duration"),
                 "elapsed_s": elapsed_s,
                 "text_length": len(self.payload.get("text", "")),
-                "output_seconds": len(final_audio) / float(self.model.sampling_rate),
+                "output_seconds": 0.0,
                 "chunk_count": total_chunks,
                 "chunk_chars": self.payload.get("chunk_chars"),
             }
             self.progress.emit("Đang hoàn tất kết quả...", 95)
             self._raise_if_cancelled()
-            if session_id and self.session_manager:
-                final_audio_path = self.session_manager.final_output_path(session_id)
-            else:
-                temp_file = _named_temp_wav()
-                temp_file.close()
-                final_audio_path = Path(temp_file.name)
-            temp_final = final_audio_path.with_suffix(final_audio_path.suffix + ".tmp")
-            sf.write(str(temp_final), final_audio, self.model.sampling_rate, format="WAV")
-            os.replace(temp_final, final_audio_path)
-            meta["final_audio_file"] = str(final_audio_path)
+            final_audio_file, output_seconds = self._build_output_from_session_chunks()
+            if not final_audio_file:
+                raise RuntimeError("KhÃ´ng thá»ƒ ghÃ©p audio tá»« cÃ¡c chunk Ä‘Ã£ táº¡o.")
+            meta["final_audio_file"] = final_audio_file
+            meta["output_seconds"] = output_seconds
             if session_id and self.session_manager:
                 self.session_manager.mark_finished(
                     session_id,
                     "completed",
                     elapsed_s,
-                    final_audio=str(final_audio_path),
+                    final_audio=final_audio_file,
                 )
-            del final_audio
             self.success.emit(None, meta)
         except Exception as exc:
             self.error.emit(str(exc), traceback.format_exc())
@@ -1594,6 +1830,8 @@ class OmniVoiceQtWindow(QMainWindow):
         trim_row = QHBoxLayout()
         self.preview_play_btn = QPushButton("Phát đoạn đã cắt")
         self.preview_play_btn.clicked.connect(self._toggle_media_preview)
+        self.auto_pick_btn = QPushButton("Tự chọn đoạn tốt")
+        self.auto_pick_btn.clicked.connect(self._auto_pick_reference_segment)
         self.cut_real_btn = QPushButton("Cắt thật")
         self.cut_real_btn.clicked.connect(self._cut_reference_audio_real)
         
@@ -1607,6 +1845,7 @@ class OmniVoiceQtWindow(QMainWindow):
         self.trim_end.valueChanged.connect(self._sync_range_from_spin)
         
         trim_row.addWidget(self.preview_play_btn)
+        trim_row.addWidget(self.auto_pick_btn)
         trim_row.addWidget(self.cut_real_btn)
         trim_row.addStretch(1)
         trim_row.addWidget(QLabel("Từ (s):"))
@@ -1614,6 +1853,9 @@ class OmniVoiceQtWindow(QMainWindow):
         trim_row.addWidget(QLabel("Đến (s):"))
         trim_row.addWidget(self.trim_end)
         c2_l.addLayout(trim_row)
+        self.auto_trim_info = QLabel("Mẹo: bấm 'Tự chọn đoạn tốt' để app tự tìm đoạn mẫu dễ clone hơn.")
+        self.auto_trim_info.setWordWrap(True)
+        c2_l.addWidget(self.auto_trim_info)
 
         c2_l.addSpacing(10)
         c2_l.addWidget(self._label("Lời của đoạn ghi âm mẫu (Tùy chọn, để trống AI sẽ tự nghe):", "SubTitle"))
@@ -1973,6 +2215,41 @@ class OmniVoiceQtWindow(QMainWindow):
         command = [ffmpeg_exe, "-y", "-i", video_path, "-vn", "-ac", "1", "-ar", "24000", output_wav]
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def _resolve_reference_working_source(self, source: str) -> str:
+        suffix = Path(source).suffix.lower()
+        if suffix in {".mp4", ".mov", ".mkv", ".avi"}:
+            extracted = _named_temp_wav()
+            extracted.close()
+            self._extract_audio_from_video(source, extracted.name)
+            return extracted.name
+        return source
+
+    def _apply_reference_segment_selection(self, start_sec: float, end_sec: float, reason: str | None = None) -> None:
+        end_sec = max(start_sec + 0.1, end_sec)
+        self.trim_start.setValue(start_sec)
+        self.trim_end.setValue(end_sec)
+        self._sync_range_from_spin()
+        if hasattr(self, "auto_trim_info") and reason:
+            self.auto_trim_info.setText(f"Tự chọn: {start_sec:.2f}s -> {end_sec:.2f}s, {reason}.")
+
+    def _auto_pick_reference_segment(self):
+        source = self.clone_file.text().strip()
+        if not source:
+            QMessageBox.warning(self, "Chưa có file mẫu", "Hãy chọn file audio/video trước khi tự chọn đoạn.")
+            return
+        try:
+            working_source = self._resolve_reference_working_source(source)
+            audio, sampling_rate = librosa.load(working_source, sr=24000, mono=True)
+            selection = _auto_select_reference_segment(audio, sampling_rate)
+            self._apply_reference_segment_selection(
+                float(selection.get("start_sec") or 0.0),
+                float(selection.get("end_sec") or 0.0),
+                str(selection.get("reason") or "ưu tiên đoạn rõ giọng"),
+            )
+            self.clone_status.setText("Đã tự chọn đoạn mẫu phù hợp để clone giọng.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Không tự chọn được", str(exc))
+
     def _prepare_reference_audio(self):
         source = self.clone_file.text().strip()
         if not source:
@@ -1988,13 +2265,7 @@ class OmniVoiceQtWindow(QMainWindow):
             self.current_processed_ref = cached_ref
             return cached_ref, start_sec, end_sec
 
-        suffix = Path(source).suffix.lower()
-        working_source = source
-        if suffix in {".mp4", ".mov", ".mkv", ".avi"}:
-            extracted = _named_temp_wav()
-            extracted.close()
-            self._extract_audio_from_video(source, extracted.name)
-            working_source = extracted.name
+        working_source = self._resolve_reference_working_source(source)
 
         audio = AudioSegment.from_file(working_source)
         start_sec = self.trim_start.value()
@@ -2177,7 +2448,6 @@ class OmniVoiceQtWindow(QMainWindow):
         new_payload["session_id"] = session_id
         new_payload["elapsed_offset_s"] = 0.0
         new_payload["resume_from_chunk_index"] = 0
-        new_payload["preloaded_parts"] = []
         new_payload["completed_chunk_indexes"] = []
         if mode == "clone":
             saved = self.session_manager.load_session(session_id)
@@ -2194,20 +2464,16 @@ class OmniVoiceQtWindow(QMainWindow):
         payload = dict(manifest.get("payload") or {})
         config_data = payload.get("generation_config") or {}
         payload["generation_config"] = OmniVoiceGenerationConfig(**config_data)
-        preloaded_parts = []
         first_incomplete = 0
         for chunk in manifest.get("chunks") or []:
             audio_file = chunk.get("audio_file")
             if chunk.get("status") == "completed" and audio_file and os.path.exists(audio_file):
-                audio, _sr = sf.read(audio_file)
-                preloaded_parts.append(audio)
                 first_incomplete = chunk.get("index", first_incomplete) + 1
                 continue
             break
         payload["session_id"] = session_id
         payload["elapsed_offset_s"] = float(manifest.get("timing", {}).get("elapsed_active_s") or 0.0)
         payload["resume_from_chunk_index"] = first_incomplete
-        payload["preloaded_parts"] = preloaded_parts
         payload["completed_chunk_indexes"] = list(range(first_incomplete))
         self._refresh_recovery_list()
         self._run_worker(manifest.get("mode") or "clone", payload)
@@ -2350,6 +2616,32 @@ class OmniVoiceQtWindow(QMainWindow):
         self.session_manager.delete_session(session_id)
         self._refresh_recovery_list()
 
+    def _build_output_from_session(self, session_id: str) -> tuple[str | None, float, int, int]:
+        manifest = self.session_manager.load_session(session_id)
+        chunk_files = _completed_chunk_files_from_manifest(manifest)
+        if not chunk_files:
+            return None, 0.0, 0, len(manifest.get("chunks") or [])
+        final_audio_file, output_seconds = _stitch_chunk_files_to_wav(
+            chunk_files,
+            self.session_manager.final_output_path(session_id),
+        )
+        return final_audio_file, output_seconds, len(chunk_files), len(manifest.get("chunks") or [])
+
+    def _set_active_output(self, output_path: str | None, session_id: str | None) -> None:
+        previous_session_id = self.current_output_session_id
+        previous_output_path = self.current_output_path
+        if previous_session_id and previous_session_id != session_id:
+            self._cleanup_current_output_artifact()
+        elif previous_output_path and previous_output_path != output_path and not previous_session_id:
+            try:
+                if os.path.exists(previous_output_path):
+                    os.remove(previous_output_path)
+            except Exception:
+                pass
+        self.current_output_path = output_path
+        self.current_output_session_id = session_id
+        self.audio_output = None
+
     def _cleanup_current_output_artifact(self):
         self.result_player.stop()
         self.is_playing = False
@@ -2397,11 +2689,7 @@ class OmniVoiceQtWindow(QMainWindow):
             return
         self._active_worker_token = None
         self._reset_generation_ui(mode)
-        if self.current_output_path or self.current_output_session_id:
-            self._cleanup_current_output_artifact()
-        self.current_output_path = meta.get("final_audio_file")
-        self.current_output_session_id = meta.get("session_id")
-        self.audio_output = None
+        self._set_active_output(meta.get("final_audio_file"), meta.get("session_id"))
         elapsed_s = meta.get("elapsed_s") or self._elapsed_for_mode(mode)
         self._runtime_state[mode]["elapsed_offset_s"] = float(elapsed_s)
         self._refresh_recovery_list()
@@ -2455,35 +2743,68 @@ class OmniVoiceQtWindow(QMainWindow):
         elapsed_s = self._elapsed_for_mode(mode)
         self._active_worker_token = None
         session_id = self._runtime_state.get(mode, {}).get("session_id")
+        cancelled = message == "Đã hủy tác vụ"
+        partial_output_path = None
+        partial_output_seconds = 0.0
+        completed_chunks = 0
+        total_chunks = 0
         if session_id:
-            status = "cancelled" if message == "Đã hủy tác vụ" else "failed"
+            status = "cancelled" if cancelled else "failed"
             self.session_manager.mark_finished(session_id, status, elapsed_s, error=message)
+            if cancelled:
+                partial_output_path, partial_output_seconds, completed_chunks, total_chunks = self._build_output_from_session(session_id)
+                if partial_output_path:
+                    self._set_active_output(partial_output_path, session_id)
+                    self.session_manager.mark_finished(
+                        session_id,
+                        status,
+                        elapsed_s,
+                        error=message,
+                        final_audio=partial_output_path,
+                    )
         self._reset_generation_ui(mode)
         self._refresh_recovery_list()
-        cancelled = message == "Đã hủy tác vụ"
         if mode == "clone":
             self.clone_status.setText("Trạng thái hệ thống: Đã hủy." if cancelled else f"Lỗi: {message}")
             self.clone_progress.setValue(100)
+            if cancelled and partial_output_path:
+                self.play_result_btn.setEnabled(True)
+                self.save_result_btn.setEnabled(True)
             self.clone_info.setPlainText(
                 "\n".join([
                     "Đã hủy clone giọng." if cancelled else "Clone giọng thất bại.",
                     "",
                     f"Thiết bị: {self._device_label()}",
                     f"Thời gian trước khi dừng: {elapsed_s:.2f}s" if cancelled else f"Thời gian trước khi lỗi: {elapsed_s:.2f}s",
-                    "Tác vụ sẽ dừng sau chunk hiện tại để tránh crash app." if cancelled else f"Lỗi chính: {message}",
+                    (
+                        f"Giữ lại {completed_chunks}/{total_chunks} chunk để bạn phát hoặc tải ngay."
+                        if cancelled and partial_output_path
+                        else "Chưa có chunk nào hoàn tất để phát/tải." if cancelled
+                        else f"Lỗi chính: {message}"
+                    ),
+                    *([f"Audio tạm hiện có: {partial_output_seconds:.2f}s"] if cancelled and partial_output_path else []),
                     *( [] if cancelled else ["", "Traceback chi tiết:", detail.strip()] ),
                 ])
             )
         else:
             self.design_status.setText("Trạng thái hệ thống: Đã hủy." if cancelled else f"Lỗi: {message}")
             self.design_progress.setValue(100)
+            if cancelled and partial_output_path:
+                self.design_play_btn.setEnabled(True)
+                self.design_save_btn.setEnabled(True)
             self.design_info.setPlainText(
                 "\n".join([
                     "Đã hủy thiết kế giọng." if cancelled else "Thiết kế giọng thất bại.",
                     "",
                     f"Thiết bị: {self._device_label()}",
                     f"Thời gian trước khi dừng: {elapsed_s:.2f}s" if cancelled else f"Thời gian trước khi lỗi: {elapsed_s:.2f}s",
-                    "Tác vụ sẽ dừng sau chunk hiện tại để tránh crash app." if cancelled else f"Lỗi chính: {message}",
+                    (
+                        f"Giữ lại {completed_chunks}/{total_chunks} chunk để bạn phát hoặc tải ngay."
+                        if cancelled and partial_output_path
+                        else "Chưa có chunk nào hoàn tất để phát/tải." if cancelled
+                        else f"Lỗi chính: {message}"
+                    ),
+                    *([f"Audio tạm hiện có: {partial_output_seconds:.2f}s"] if cancelled and partial_output_path else []),
                     *( [] if cancelled else ["", "Traceback chi tiết:", detail.strip()] ),
                 ])
             )
@@ -2701,3 +3022,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
